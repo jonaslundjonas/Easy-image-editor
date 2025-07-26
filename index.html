@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Easy Image Editor 1.0</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
+    <script src="https://unpkg.com/utif@3.1.0/UTIF.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --md-dark-background: #1c1b1f; 
+            --md-dark-surface: #2b2930;
+            --md-dark-primary: #f2b8b5;
+            --md-dark-on-primary: #601410;
+            --md-dark-on-surface: #e6e1e5; 
+            --md-dark-on-surface-variant: #cac4d0;
+            --md-dark-outline: #49454f; 
+            --md-dark-slider-track: #49454f;
+        }
+        * { box-sizing: border-box; }
+        body {
+            background-color: var(--md-dark-background); 
+            color: var(--md-dark-on-surface);
+            font-family: 'Roboto', sans-serif; 
+            margin: 0; 
+            display: flex;
+            flex-direction: column; 
+            height: 100vh; 
+            overflow: hidden;
+        }
+        .page-wrapper { 
+            display: flex; 
+            flex-direction: column; 
+            height: 100%; 
+            padding: 20px; 
+        }
+        header {
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            padding-bottom: 20px; 
+            border-bottom: 1px solid var(--md-dark-outline); 
+            flex-shrink: 0;
+        }
+        header h1 { 
+            margin: 0; 
+            font-weight: 500; 
+            font-size: 24px; 
+        }
+        .header-controls { 
+            display: flex; 
+            align-items: center; 
+            gap: 15px; 
+        }
+        #current-filename {
+            flex-grow: 1; 
+            text-align: right; 
+            margin: 0 20px 0 0;
+            font-size: 14px; 
+            color: var(--md-dark-on-surface-variant);
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis;
+        }
+        .main-content { 
+            display: flex; 
+            gap: 20px; 
+            flex-grow: 1; 
+            padding-top: 20px; 
+            min-height: 0; 
+        }
+        .canvas-wrapper {
+            flex-grow: 1; 
+            background-color: var(--md-dark-surface);
+            border-radius: 12px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            border: 1px solid var(--md-dark-outline); 
+            overflow: auto;
+        }
+        #image-container { 
+            position: relative; 
+        }
+        #image-canvas, #cropper-image {
+            max-width: initial; 
+            max-height: initial;
+            transition: transform 0.1s ease-out;
+        }
+        .controls-panel {
+            width: 320px; 
+            flex-shrink: 0; 
+            background-color: var(--md-dark-surface);
+            border-radius: 12px; 
+            padding: 20px; 
+            overflow-y: auto;
+            border: 1px solid var(--md-dark-outline);
+            transition: opacity 0.3s ease, filter 0.3s ease;
+        }
+        .control-group { 
+            margin-bottom: 24px; 
+        }
+        .control-group h3 {
+            margin: 0 0 16px 0; 
+            font-size: 16px; 
+            font-weight: 500;
+            color: var(--md-dark-on-surface); 
+            border-bottom: 1px solid var(--md-dark-outline);
+            padding-bottom: 8px;
+        }
+        .control-item { 
+            display: flex; 
+            flex-direction: column; 
+            margin-bottom: 16px; 
+        }
+        .label-container { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 8px; 
+        }
+        .slider-value { 
+            font-size: 14px; 
+            color: var(--md-dark-on-surface); 
+            min-width: 45px; 
+            text-align: right; 
+        }
+        .dimensions-display { 
+            font-size: 12px; 
+            color: var(--md-dark-on-surface-variant); 
+            text-align: center; 
+        }
+        .btn-group { 
+            display: flex; 
+            gap: 10px; 
+            flex-wrap: wrap; 
+        }
+        .btn {
+            background-color: var(--md-dark-primary); 
+            color: var(--md-dark-on-primary);
+            border: none; 
+            padding: 12px; 
+            border-radius: 20px; 
+            font-size: 14px;
+            font-weight: 700; 
+            cursor: pointer; 
+            transition: background-color 0.3s ease, filter 0.3s ease;
+            flex-grow: 1; 
+            text-align: center;
+        }
+        .btn-secondary {
+            background-color: var(--md-dark-surface); 
+            color: var(--md-dark-primary);
+            border: 1px solid var(--md-dark-primary);
+        }
+        .btn.active { 
+            background-color: var(--md-dark-primary); 
+            color: var(--md-dark-on-primary); 
+        }
+        .btn:hover { 
+            filter: brightness(1.1); 
+        }
+        #file-input { 
+            display: none; 
+        }
+        input[type="range"] {
+            -webkit-appearance: none; 
+            width: 100%; 
+            height: 4px; 
+            background: var(--md-dark-slider-track);
+            outline: none; 
+            border-radius: 2px; 
+            margin-top: 0;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; 
+            appearance: none; 
+            width: 20px; 
+            height: 20px;
+            background: var(--md-dark-primary); 
+            cursor: pointer; 
+            border-radius: 50%;
+        }
+        select {
+            background-color: var(--md-dark-surface); 
+            color: var(--md-dark-on-surface);
+            border: 1px solid var(--md-dark-outline); 
+            padding: 10px; 
+            border-radius: 8px;
+            font-family: 'Roboto', sans-serif; 
+            font-size: 14px;
+        }
+        footer {
+            flex-shrink: 0; 
+            padding-top: 20px; 
+            text-align: center;
+            color: var(--md-dark-on-surface-variant); 
+            font-size: 14px;
+        }
+        .ui-locked .controls-panel, .ui-locked .header-controls {
+             pointer-events: none;
+             opacity: 0.5;
+             filter: blur(1px);
+        }
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .modal-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal-dialog {
+            background-color: var(--md-dark-surface);
+            padding: 25px;
+            border-radius: 12px;
+            border: 1px solid var(--md-dark-outline);
+            width: 90%;
+            max-width: 350px;
+            text-align: center;
+        }
+        .modal-dialog p {
+            margin: 0 0 15px 0;
+        }
+        .modal-dialog input {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid var(--md-dark-outline);
+            background-color: var(--md-dark-background);
+            color: var(--md-dark-on-surface);
+            font-size: 16px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-wrapper" id="page-wrapper">
+        <header>
+            <h1>Easy Image Editor 1.0</h1>
+            <div class="header-controls">
+                <p id="current-filename">No file loaded</p>
+                <label for="file-input" class="btn">Load Image</label>
+                <input type="file" id="file-input" accept="image/jpeg, image/png, image/webp, image/tiff, image/bmp, image/gif, application/pdf">
+                <select id="save-format-select">
+                    <option value="png">PNG</option>
+                    <option value="jpg">JPG</option>
+                    <option value="webp">WEBP</option>
+                    <option value="pdf">PDF</option>
+                </select>
+                <button id="save-btn" class="btn btn-secondary">Save Image</button>
+            </div>
+        </header>
+        <main class="main-content">
+            <div class="canvas-wrapper">
+                <div id="image-container">
+                    <canvas id="image-canvas"></canvas>
+                    <img id="cropper-image" style="display: none; max-width: 100%;">
+                </div>
+            </div>
+            <div class="controls-panel" id="controls-panel">
+                 <div class="control-group">
+                    <h3>Destructive Actions</h3>
+                     <div class="btn-group">
+                         <button data-action="start-crop" class="btn btn-secondary">Crop</button>
+                         <button data-action="apply-crop" class="btn" style="display:none;">Apply Crop</button>
+                         <button data-action="cancel-crop" class="btn btn-secondary" style="display:none;">Cancel</button>
+                     </div>
+                    <div class="btn-group" style="margin-top: 10px;">
+                        <button data-action="rotate-left" class="btn btn-secondary" title="Rotate Left">-90°</button>
+                        <button data-action="rotate-right" class="btn btn-secondary" title="Rotate Right">+90°</button>
+                        <button data-action="flip-h" class="btn btn-secondary" title="Flip Horizontal">H</button>
+                        <button data-action="flip-v" class="btn btn-secondary" title="Flip Vertical">V</button>
+                    </div>
+                    <div class="control-item" style="margin-top: 16px;">
+                        <div class="label-container"><label for="resize-slider">Scale</label><span class="slider-value">100%</span></div>
+                        <input type="range" id="resize-slider" min="10" max="100" value="100">
+                        <div class="dimensions-display">(<span id="resize-w">0</span> x <span id="resize-h">0</span> px)</div>
+                    </div>
+                    <button data-action="apply-resize" class="btn btn-secondary">Apply Resize</button>
+                </div>
+                <div class="control-group">
+                    <h3>Filters</h3>
+                     <div class="btn-group">
+                         <button data-filter="grayscale" class="btn btn-secondary">Greyscale</button>
+                         <button data-filter="invert" class="btn btn-secondary">Invert</button>
+                         <button data-action="reset-filters" class="btn btn-secondary">Reset Filters</button>
+                     </div>
+                </div>
+                <div class="control-group">
+                    <h3>View</h3>
+                    <div class="control-item">
+                        <div class="label-container"><label for="zoom-slider">Zoom</label><span class="slider-value">100%</span></div>
+                        <input type="range" id="zoom-slider" min="10" max="300" value="100">
+                    </div>
+                </div>
+                <div class="control-group">
+                    <h3>Adjustments</h3>
+                    <div class="control-item">
+                        <div class="label-container"><label for="contrast-slider">Contrast</label><span class="slider-value">100%</span></div>
+                        <input type="range" data-adjustment="contrast" id="contrast-slider" min="0" max="200" value="100">
+                    </div>
+                    <div class="control-item">
+                        <div class="label-container"><label for="saturation-slider">Saturation</label><span class="slider-value">100%</span></div>
+                        <input type="range" data-adjustment="saturate" id="saturation-slider" min="0" max="200" value="100">
+                    </div>
+                    <div class="control-item">
+                        <div class="label-container"><label for="exposure-slider">Brightness</label><span class="slider-value">100%</span></div>
+                        <input type="range" data-adjustment="brightness" id="exposure-slider" min="0" max="200" value="100">
+                    </div>
+                    <div class="control-item">
+                        <div class="label-container"><label for="sharpness-slider">Sharpness</label><span class="slider-value">0%</span></div>
+                        <input type="range" data-adjustment="sharpness" id="sharpness-slider" min="0" max="100" value="0">
+                    </div>
+                </div>
+            </div>
+        </main>
+        <footer><p>Created by Jonas Lund 2025</p></footer>
+    </div>
+
+    <div class="modal-overlay" id="pdf-page-modal">
+        <div class="modal-dialog">
+            <p id="pdf-page-prompt-text">This PDF has multiple pages. Please enter a page number to load:</p>
+            <input type="number" id="pdf-page-input" min="1">
+            <div class="btn-group">
+                <button id="pdf-page-cancel" class="btn btn-secondary">Cancel</button>
+                <button id="pdf-page-confirm" class="btn">Load Page</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ✨ ADDED: Modal for custom filename on save -->
+    <div class="modal-overlay" id="save-modal">
+        <div class="modal-dialog">
+            <p>Enter a filename:</p>
+            <input type="text" id="save-filename-input">
+            <div class="btn-group">
+                <button id="save-cancel" class="btn btn-secondary">Cancel</button>
+                <button id="save-confirm" class="btn">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js`;
+
+            let dom = {
+                pageWrapper: document.getElementById('page-wrapper'),
+                canvas: document.getElementById('image-canvas'),
+                cropperImage: document.getElementById('cropper-image'),
+                fileInput: document.getElementById('file-input'),
+                filenameDisplay: document.getElementById('current-filename'),
+                saveBtn: document.getElementById('save-btn'),
+                saveFormatSelect: document.getElementById('save-format-select'),
+                imageContainer: document.getElementById('image-container'),
+                controlsPanel: document.getElementById('controls-panel'),
+                sliders: {
+                    all: document.querySelectorAll('input[type="range"]'),
+                    zoom: document.getElementById('zoom-slider'),
+                    resize: document.getElementById('resize-slider'),
+                    contrast: document.getElementById('contrast-slider'),
+                    saturate: document.getElementById('saturation-slider'),
+                    brightness: document.getElementById('exposure-slider'),
+                    sharpness: document.getElementById('sharpness-slider')
+                },
+                resizeW: document.getElementById('resize-w'),
+                resizeH: document.getElementById('resize-h'),
+                cropControls: {
+                    start: document.querySelector('[data-action="start-crop"]'),
+                    apply: document.querySelector('[data-action="apply-crop"]'),
+                    cancel: document.querySelector('[data-action="cancel-crop"]')
+                },
+                pdfModal: {
+                    overlay: document.getElementById('pdf-page-modal'),
+                    promptText: document.getElementById('pdf-page-prompt-text'),
+                    input: document.getElementById('pdf-page-input'),
+                    confirmBtn: document.getElementById('pdf-page-confirm'),
+                    cancelBtn: document.getElementById('pdf-page-cancel')
+                },
+                // ✨ ADDED: Save modal DOM elements
+                saveModal: {
+                    overlay: document.getElementById('save-modal'),
+                    input: document.getElementById('save-filename-input'),
+                    confirmBtn: document.getElementById('save-confirm'),
+                    cancelBtn: document.getElementById('save-cancel')
+                }
+            };
+
+            let state = {
+                isRendering: false,
+                isCropping: false,
+                baseImage: null,
+                currentFilename: 'No file loaded',
+                cropper: null,
+                filterToggles: {
+                    grayscale: false,
+                    invert: false
+                },
+                filterDebounceTimer: null
+            };
+
+            const setUILocked = (isLocked) => {
+                dom.pageWrapper.classList.toggle('ui-locked', isLocked);
+            };
+
+            // --- CORE IMAGE HANDLING ---
+
+            const loadImage = (src, filename) => {
+                setUILocked(true);
+                const img = new Image();
+                img.onload = () => {
+                    state.baseImage = img;
+                    dom.canvas.width = img.width;
+                    dom.canvas.height = img.height;
+                    
+                    if (filename) {
+                        state.currentFilename = filename;
+                        dom.filenameDisplay.textContent = filename;
+                    }
+                    
+                    resetAllControls();
+                    renderImageWithFilters().then(() => setUILocked(false));
+                };
+                img.onerror = () => {
+                    alert('Could not load image. Please try another file.');
+                    setUILocked(false);
+                };
+                img.src = src;
+            };
+            
+            const applyConvolutionMatrix = (ctx, weights) => {
+                const pixels = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+                const side = Math.round(Math.sqrt(weights.length));
+                const halfSide = Math.floor(side / 2);
+                const src = pixels.data;
+                const sw = pixels.width;
+                const sh = pixels.height;
+                const w = sw;
+                const h = sh;
+                const output = ctx.createImageData(w, h);
+                const dst = output.data;
+
+                for (let y = 0; y < h; y++) {
+                    for (let x = 0; x < w; x++) {
+                        const sy = y;
+                        const sx = x;
+                        const dstOff = (y * w + x) * 4;
+                        let r = 0, g = 0, b = 0;
+                        for (let cy = 0; cy < side; cy++) {
+                            for (let cx = 0; cx < side; cx++) {
+                                const scy = Math.min(sh - 1, Math.max(0, sy + cy - halfSide));
+                                const scx = Math.min(sw - 1, Math.max(0, sx + cx - halfSide));
+                                const srcOff = (scy * sw + scx) * 4;
+                                const wt = weights[cy * side + cx];
+                                r += src[srcOff] * wt;
+                                g += src[srcOff + 1] * wt;
+                                b += src[srcOff + 2] * wt;
+                            }
+                        }
+                        dst[dstOff] = r;
+                        dst[dstOff + 1] = g;
+                        dst[dstOff + 2] = b;
+                        dst[dstOff + 3] = src[dstOff + 3];
+                    }
+                }
+                ctx.putImageData(output, 0, 0);
+            };
+            
+            const renderImageWithFilters = () => {
+                return new Promise(resolve => {
+                    if (!state.baseImage) {
+                        resolve();
+                        return;
+                    }
+
+                    const ctx = dom.canvas.getContext('2d');
+                    
+                    let filterStrings = [];
+                    dom.sliders.all.forEach(slider => {
+                        if (slider.dataset.adjustment && slider.id !== 'sharpness-slider') {
+                            const adj = slider.dataset.adjustment;
+                            const val = slider.value;
+                            filterStrings.push(`${adj}(${val}%)`);
+                        }
+                    });
+                    
+                    if (state.filterToggles.grayscale) filterStrings.push('grayscale(100%)');
+                    if (state.filterToggles.invert) filterStrings.push('invert(100%)');
+
+                    ctx.filter = filterStrings.join(' ');
+                    ctx.clearRect(0, 0, dom.canvas.width, dom.canvas.height);
+                    ctx.drawImage(state.baseImage, 0, 0);
+                    ctx.filter = 'none';
+
+                    const sharpenValue = parseInt(dom.sliders.sharpness.value, 10);
+                    if (sharpenValue > 0) {
+                        const amount = sharpenValue / 100;
+                        const sharpenKernel = [
+                            0, -amount, 0,
+                            -amount, 1 + 4 * amount, -amount,
+                            0, -amount, 0
+                        ];
+                        applyConvolutionMatrix(ctx, sharpenKernel);
+                    }
+
+                    resolve();
+                });
+            };
+
+            // --- DESTRUCTIVE ACTIONS (Crop, Rotate, Resize) ---
+
+            const startCrop = () => {
+                if (!state.baseImage || state.isCropping) return;
+                state.isCropping = true;
+                
+                dom.canvas.style.display = 'none';
+                dom.cropperImage.src = dom.canvas.toDataURL();
+                dom.cropperImage.style.display = 'block';
+                
+                state.cropper = new Cropper(dom.cropperImage, { viewMode: 1, background: false, autoCropArea: 1 });
+                
+                dom.cropControls.start.style.display = 'none';
+                dom.cropControls.apply.style.display = 'inline-block';
+                dom.cropControls.cancel.style.display = 'inline-block';
+            };
+
+            const endCrop = (applyChange = false) => {
+                if (!state.isCropping) return;
+                
+                if (applyChange) {
+                    const croppedCanvas = state.cropper.getCroppedCanvas();
+                    loadImage(croppedCanvas.toDataURL());
+                }
+                
+                state.cropper.destroy();
+                state.cropper = null;
+                dom.cropperImage.style.display = 'none';
+                dom.canvas.style.display = 'block';
+
+                dom.cropControls.start.style.display = 'inline-block';
+                dom.cropControls.apply.style.display = 'none';
+                dom.cropControls.cancel.style.display = 'none';
+                state.isCropping = false;
+            };
+            
+            const applyTransform = (action) => {
+                if (!state.baseImage) return;
+                
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                let w = dom.canvas.width, h = dom.canvas.height;
+
+                if (action === 'rotate-left' || action === 'rotate-right') {
+                    [w, h] = [h, w];
+                }
+                tempCanvas.width = w;
+                tempCanvas.height = h;
+                
+                tempCtx.translate(w / 2, h / 2);
+                switch(action) {
+                    case 'rotate-left': tempCtx.rotate(-90 * Math.PI / 180); break;
+                    case 'rotate-right': tempCtx.rotate(90 * Math.PI / 180); break;
+                    case 'flip-h': tempCtx.scale(-1, 1); break;
+                    case 'flip-v': tempCtx.scale(1, -1); break;
+                }
+                tempCtx.drawImage(dom.canvas, -dom.canvas.width / 2, -dom.canvas.height / 2);
+                
+                loadImage(tempCanvas.toDataURL());
+            };
+
+            const applyResize = () => {
+                if (!state.baseImage) return;
+                
+                const scale = parseInt(dom.sliders.resize.value, 10) / 100;
+                const sourceCanvas = dom.canvas;
+                const newWidth = Math.round(sourceCanvas.width * scale);
+                const newHeight = Math.round(sourceCanvas.height * scale);
+
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = newWidth;
+                tempCanvas.height = newHeight;
+                
+                tempCanvas.getContext('2d').drawImage(sourceCanvas, 0, 0, newWidth, newHeight);
+                
+                loadImage(tempCanvas.toDataURL());
+            };
+
+            // --- UI AND EVENT HANDLERS ---
+
+            const onFilterChange = () => {
+                clearTimeout(state.filterDebounceTimer);
+                state.filterDebounceTimer = setTimeout(() => {
+                    setUILocked(true);
+                    renderImageWithFilters().then(() => {
+                        setUILocked(false);
+                    });
+                }, 50);
+            };
+
+            const updateSliderValue = (slider) => {
+                const valueDisplay = slider.parentElement.querySelector('.slider-value');
+                if (valueDisplay) {
+                    const isPercentage = slider.id.includes('slider');
+                    const unit = isPercentage ? '%' : '';
+                    valueDisplay.textContent = slider.value + unit;
+                }
+            };
+
+            const resetFilterControls = () => {
+                dom.sliders.contrast.value = 100;
+                dom.sliders.saturate.value = 100;
+                dom.sliders.brightness.value = 100;
+                dom.sliders.sharpness.value = 0;
+                updateSliderValue(dom.sliders.contrast);
+                updateSliderValue(dom.sliders.saturate);
+                updateSliderValue(dom.sliders.brightness);
+                updateSliderValue(dom.sliders.sharpness);
+
+                Object.keys(state.filterToggles).forEach(key => {
+                    state.filterToggles[key] = false;
+                    const btn = document.querySelector(`[data-filter="${key}"]`);
+                    if (btn) btn.classList.remove('active');
+                });
+            };
+            
+            const resetAllControls = () => {
+                dom.sliders.zoom.value = 100;
+                dom.sliders.resize.value = 100;
+                updateSliderValue(dom.sliders.zoom);
+                updateSliderValue(dom.sliders.resize);
+                
+                resetFilterControls();
+                
+                updateZoom();
+                updateResizeDisplay();
+            };
+
+            const updateZoom = () => {
+                const scale = dom.sliders.zoom.value / 100;
+                dom.imageContainer.style.transform = `scale(${scale})`;
+            };
+
+            const updateResizeDisplay = () => {
+                if (!state.baseImage) {
+                    dom.resizeW.textContent = 0;
+                    dom.resizeH.textContent = 0;
+                    return;
+                }
+                const scale = parseInt(dom.sliders.resize.value, 10) / 100;
+                dom.resizeW.textContent = Math.round(state.baseImage.width * scale);
+                dom.resizeH.textContent = Math.round(state.baseImage.height * scale);
+            };
+
+            const showPagePrompt = (maxPage, callback) => {
+                dom.pdfModal.promptText.textContent = `This PDF has ${maxPage} pages. Please enter a page number to load (1 - ${maxPage}):`;
+                dom.pdfModal.input.max = maxPage;
+                dom.pdfModal.input.value = 1;
+                dom.pdfModal.overlay.classList.add('visible');
+
+                const confirmHandler = () => {
+                    const pageNum = parseInt(dom.pdfModal.input.value, 10);
+                    if (pageNum >= 1 && pageNum <= maxPage) {
+                        callback(pageNum);
+                        hidePagePrompt();
+                    } else {
+                        alert(`Please enter a valid page number between 1 and ${maxPage}.`);
+                    }
+                };
+
+                const cancelHandler = () => {
+                    hidePagePrompt();
+                };
+
+                const hidePagePrompt = () => {
+                    dom.pdfModal.overlay.classList.remove('visible');
+                    dom.pdfModal.confirmBtn.removeEventListener('click', confirmHandler);
+                    dom.pdfModal.cancelBtn.removeEventListener('click', cancelHandler);
+                };
+
+                dom.pdfModal.confirmBtn.addEventListener('click', confirmHandler);
+                dom.pdfModal.cancelBtn.addEventListener('click', cancelHandler);
+            };
+
+            // --- Bind Event Listeners ---
+
+            dom.fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                if (file.type === 'application/pdf') {
+                    const reader = new FileReader();
+                    reader.onload = async (event) => {
+                        try {
+                            const pdfData = new Uint8Array(event.target.result);
+                            const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+                            
+                            const loadPage = async (pageNum) => {
+                                const page = await pdf.getPage(pageNum);
+                                const viewport = page.getViewport({ scale: 1.5 });
+
+                                const tempCanvas = document.createElement('canvas');
+                                const tempCtx = tempCanvas.getContext('2d');
+                                tempCanvas.height = viewport.height;
+                                tempCanvas.width = viewport.width;
+
+                                await page.render({ canvasContext: tempCtx, viewport: viewport }).promise;
+                                loadImage(tempCanvas.toDataURL(), file.name);
+                            };
+
+                            if (pdf.numPages > 1) {
+                                showPagePrompt(pdf.numPages, loadPage);
+                            } else {
+                                loadPage(1);
+                            }
+                        } catch (err) {
+                            console.error(err);
+                            alert('Could not load the PDF file. It may be corrupt or password-protected.');
+                        }
+                    };
+                    reader.readAsArrayBuffer(file);
+                } else if (file.type === 'image/tiff') {
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        try {
+                            const buffer = event.target.result;
+                            const ifds = UTIF.decode(buffer);
+                            if (!ifds || ifds.length === 0) throw new Error("Invalid TIFF data.");
+                            const firstPage = ifds[0];
+                            UTIF.decodeImage(buffer, firstPage);
+                            const rgba = UTIF.toRGBA8(firstPage);
+
+                            const tempCanvas = document.createElement('canvas');
+                            const tempCtx = tempCanvas.getContext('2d');
+                            tempCanvas.width = firstPage.width;
+                            tempCanvas.height = firstPage.height;
+
+                            const imageData = tempCtx.createImageData(firstPage.width, firstPage.height);
+                            imageData.data.set(new Uint8ClampedArray(rgba));
+                            tempCtx.putImageData(imageData, 0, 0);
+
+                            loadImage(tempCanvas.toDataURL(), file.name);
+                        } catch (err) {
+                            console.error(err);
+                            alert('Could not load the TIFF file. It may be corrupt or in an unsupported format.');
+                        }
+                    };
+                    reader.readAsArrayBuffer(file);
+                } else if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = (re) => loadImage(re.target.result, file.name);
+                    reader.readAsDataURL(file);
+                } else {
+                    alert('Please select a valid image file (JPG, PNG, WEBP, TIFF, BMP, GIF, PDF).');
+                }
+                e.target.value = null;
+            });
+
+            // ✨ REWRITTEN: Save button now opens the custom filename modal
+            dom.saveBtn.addEventListener('click', () => {
+                if (!state.baseImage) return;
+
+                const baseName = state.currentFilename.split('.')[0];
+                dom.saveModal.input.value = `edited-${baseName}`;
+                dom.saveModal.overlay.classList.add('visible');
+            });
+
+            // ✨ ADDED: Event listeners for the new save modal
+            dom.saveModal.cancelBtn.addEventListener('click', () => {
+                dom.saveModal.overlay.classList.remove('visible');
+            });
+
+            dom.saveModal.confirmBtn.addEventListener('click', () => {
+                const filename = dom.saveModal.input.value;
+                if (!filename) {
+                    alert("Please enter a filename.");
+                    return;
+                }
+
+                const format = dom.saveFormatSelect.value;
+                const mimeType = format === 'jpg' ? 'image/jpeg' : `image/${format}`;
+                
+                if (format === 'pdf') {
+                    const { jsPDF } = window.jspdf;
+                    const imgData = dom.canvas.toDataURL('image/jpeg', 0.92);
+                    const pdf = new jsPDF({
+                        orientation: dom.canvas.width > dom.canvas.height ? 'landscape' : 'portrait',
+                        unit: 'px',
+                        format: [dom.canvas.width, dom.canvas.height]
+                    });
+                    pdf.addImage(imgData, 'JPEG', 0, 0, dom.canvas.width, dom.canvas.height);
+                    pdf.save(`${filename}.pdf`);
+                } else {
+                    const dataURL = dom.canvas.toDataURL(mimeType, 0.92);
+                    const link = document.createElement('a');
+                    link.download = `${filename}.${format}`;
+                    link.href = dataURL;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+                
+                dom.saveModal.overlay.classList.remove('visible');
+            });
+
+            dom.controlsPanel.addEventListener('click', (e) => {
+                if (e.target.tagName !== 'BUTTON') return;
+                const action = e.target.dataset.action;
+                const filter = e.target.dataset.filter;
+
+                if (action) {
+                    switch (action) {
+                        case 'start-crop': startCrop(); break;
+                        case 'apply-crop': endCrop(true); break;
+                        case 'cancel-crop': endCrop(false); break;
+                        case 'apply-resize': applyResize(); break;
+                        case 'reset-filters': 
+                            if (state.baseImage) {
+                                resetFilterControls();
+                                onFilterChange();
+                            }
+                            break;
+                        case 'rotate-left':
+                        case 'rotate-right':
+                        case 'flip-h':
+                        case 'flip-v':
+                            applyTransform(action);
+                            break;
+                    }
+                }
+
+                if (filter) {
+                    state.filterToggles[filter] = !state.filterToggles[filter];
+                    e.target.classList.toggle('active', state.filterToggles[filter]);
+                    onFilterChange();
+                }
+            });
+
+            dom.sliders.all.forEach(slider => {
+                updateSliderValue(slider);
+                slider.addEventListener('input', () => {
+                    updateSliderValue(slider);
+                    if (slider === dom.sliders.zoom) updateZoom();
+                    if (slider === dom.sliders.resize) updateResizeDisplay();
+                    if (slider.dataset.adjustment) onFilterChange();
+                });
+            });
+            
+            updateResizeDisplay();
+        });
+    </script>
+</body>
+</html>
