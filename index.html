@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+<!-- Created and written by Jonas Lund 2025 -->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Easy Image Editor 1.0</title>
+    <title>Easy Image Editor 2.1</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
     <script src="https://unpkg.com/utif@3.1.0/UTIF.js"></script>
@@ -17,6 +18,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 
     <style>
+        /* CSS variables for easy theme management (Material Design dark theme) */
         :root {
             --md-dark-background: #1c1b1f; 
             --md-dark-surface: #2b2930;
@@ -51,26 +53,45 @@
             padding-bottom: 20px; 
             border-bottom: 1px solid var(--md-dark-outline); 
             flex-shrink: 0;
+            gap: 20px;
         }
         header h1 { 
             margin: 0; 
             font-weight: 500; 
             font-size: 24px; 
+            white-space: nowrap;
         }
         .header-controls { 
             display: flex; 
             align-items: center; 
             gap: 15px; 
+            width: 100%;
+        }
+        .zoom-control-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--md-dark-on-surface-variant);
+            font-size: 14px;
+            margin-right: auto;
+        }
+        .zoom-control-header input[type="range"] {
+            width: 150px;
+        }
+        .zoom-control-header .slider-value {
+            min-width: 40px;
+            text-align: left;
+            color: var(--md-dark-on-surface-variant);
         }
         #current-filename {
-            flex-grow: 1; 
             text-align: right; 
-            margin: 0 20px 0 0;
+            margin: 0;
             font-size: 14px; 
             color: var(--md-dark-on-surface-variant);
             white-space: nowrap; 
             overflow: hidden; 
             text-overflow: ellipsis;
+            flex-shrink: 1;
         }
         .main-content { 
             display: flex; 
@@ -88,6 +109,7 @@
             justify-content: center;
             border: 1px solid var(--md-dark-outline); 
             overflow: auto;
+            position: relative;
         }
         #image-container { 
             position: relative; 
@@ -96,6 +118,16 @@
             max-width: initial; 
             max-height: initial;
             transition: transform 0.1s ease-out;
+        }
+        #selection-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+        #image-container.is-selecting #selection-canvas {
+            pointer-events: auto;
+            cursor: crosshair;
         }
         .controls-panel {
             width: 320px; 
@@ -208,9 +240,9 @@
             font-size: 14px;
         }
         .ui-locked .controls-panel, .ui-locked .header-controls {
-             pointer-events: none;
-             opacity: 0.5;
-             filter: blur(1px);
+            pointer-events: none;
+            opacity: 0.5;
+            filter: blur(1px);
         }
         .modal-overlay {
             position: fixed;
@@ -243,7 +275,7 @@
         .modal-dialog p {
             margin: 0 0 15px 0;
         }
-        .modal-dialog input {
+        .modal-dialog input, .control-item input[type="text"], .control-item input[type="color"] {
             width: 100%;
             padding: 10px;
             border-radius: 8px;
@@ -252,15 +284,39 @@
             color: var(--md-dark-on-surface);
             font-size: 16px;
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
+        }
+        .control-item input[type="color"] {
+            padding: 2px;
+            height: 40px;
+        }
+        .toggle-switch {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+        }
+        /* ✨ ADDED: Style for the multi-select hint */
+        .selection-hint {
+            font-size: 12px;
+            color: var(--md-dark-on-surface-variant);
+            margin-top: 8px;
+            text-align: center;
+            width: 100%;
         }
     </style>
 </head>
 <body>
     <div class="page-wrapper" id="page-wrapper">
         <header>
-            <h1>Easy Image Editor 1.0</h1>
+            <!-- ✨ MODIFIED: Title updated -->
+            <h1>Easy Image Editor 2.1</h1>
             <div class="header-controls">
+                <div class="zoom-control-header">
+                    <label for="zoom-slider">Zoom</label>
+                    <input type="range" id="zoom-slider" min="10" max="300" value="100">
+                    <span class="slider-value">100%</span>
+                </div>
                 <p id="current-filename">No file loaded</p>
                 <label for="file-input" class="btn">Load Image</label>
                 <input type="file" id="file-input" accept="image/jpeg, image/png, image/webp, image/tiff, image/bmp, image/gif, application/pdf">
@@ -277,22 +333,27 @@
             <div class="canvas-wrapper">
                 <div id="image-container">
                     <canvas id="image-canvas"></canvas>
+                    <canvas id="selection-canvas"></canvas>
                     <img id="cropper-image" style="display: none; max-width: 100%;">
                 </div>
             </div>
             <div class="controls-panel" id="controls-panel">
                  <div class="control-group">
-                    <h3>Destructive Actions</h3>
-                     <div class="btn-group">
-                         <button data-action="start-crop" class="btn btn-secondary">Crop</button>
-                         <button data-action="apply-crop" class="btn" style="display:none;">Apply Crop</button>
-                         <button data-action="cancel-crop" class="btn btn-secondary" style="display:none;">Cancel</button>
-                     </div>
+                    <h3>Canvas Actions</h3>
+                    <div class="btn-group">
+                        <button data-action="start-crop" class="btn btn-secondary">Crop</button>
+                        <button data-action="apply-crop" class="btn" style="display:none;">Apply Crop</button>
+                        <button data-action="cancel-crop" class="btn btn-secondary" style="display:none;">Cancel</button>
+                    </div>
                     <div class="btn-group" style="margin-top: 10px;">
                         <button data-action="rotate-left" class="btn btn-secondary" title="Rotate Left">-90°</button>
                         <button data-action="rotate-right" class="btn btn-secondary" title="Rotate Right">+90°</button>
                         <button data-action="flip-h" class="btn btn-secondary" title="Flip Horizontal">H</button>
                         <button data-action="flip-v" class="btn btn-secondary" title="Flip Vertical">V</button>
+                    </div>
+                    <div class="control-item" style="margin-top: 16px;">
+                        <input type="text" id="custom-rotate-input" placeholder="Enter degrees (e.g., 45)">
+                        <button data-action="rotate-custom" class="btn btn-secondary" style="margin-top: 5px;">Apply Rotation</button>
                     </div>
                     <div class="control-item" style="margin-top: 16px;">
                         <div class="label-container"><label for="resize-slider">Scale</label><span class="slider-value">100%</span></div>
@@ -302,37 +363,108 @@
                     <button data-action="apply-resize" class="btn btn-secondary">Apply Resize</button>
                 </div>
                 <div class="control-group">
+                    <h3>Selection</h3>
+                    <div class="btn-group">
+                        <button data-action="start-selection" class="btn btn-secondary">Select Area</button>
+                    </div>
+                    <!-- ✨ ADDED: Hint for multi-selection -->
+                    <p class="selection-hint">Hold Shift to select multiple areas.</p>
+                    <div id="selection-actions" style="margin-top: 10px; display: none;">
+                        <div class="toggle-switch">
+                            <label for="invert-mask-toggle">Invert Mask</label>
+                            <input type="checkbox" id="invert-mask-toggle">
+                        </div>
+                        <div class="btn-group" style="margin-top: 10px;">
+                           <button data-action="apply-selection" class="btn">Apply Filters to Selection</button>
+                           <button data-action="deselect" class="btn btn-secondary">Deselect</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <h3>Drawing Tools</h3>
+                    <div class="btn-group">
+                        <button data-action="add-rectangle" class="btn btn-secondary">Add Rectangle</button>
+                        <button data-action="add-line" class="btn btn-secondary">Add Line</button>
+                        <button data-action="add-arrow" class="btn btn-secondary">Add Arrow</button>
+                    </div>
+                    <div class="control-item" style="margin-top: 16px;">
+                        <div class="label-container"><label for="drawing-color">Line Color</label></div>
+                        <input type="color" id="drawing-color" value="#f2b8b5">
+                    </div>
+                    <div class="control-item">
+                        <div class="label-container"><label for="line-thickness-slider">Line Thickness</label><span class="slider-value">5px</span></div>
+                        <input type="range" id="line-thickness-slider" min="1" max="50" value="5" data-unit="px">
+                    </div>
+                    <div id="drawing-actions" class="btn-group" style="display: none;">
+                        <button data-action="undo-drawing" class="btn btn-secondary">Undo Drawing</button>
+                    </div>
+                </div>
+                <div class="control-group">
                     <h3>Filters</h3>
-                     <div class="btn-group">
-                         <button data-filter="grayscale" class="btn btn-secondary">Greyscale</button>
-                         <button data-filter="invert" class="btn btn-secondary">Invert</button>
-                         <button data-action="reset-filters" class="btn btn-secondary">Reset Filters</button>
-                     </div>
-                </div>
-                <div class="control-group">
-                    <h3>View</h3>
-                    <div class="control-item">
-                        <div class="label-container"><label for="zoom-slider">Zoom</label><span class="slider-value">100%</span></div>
-                        <input type="range" id="zoom-slider" min="10" max="300" value="100">
+                    <div class="btn-group">
+                        <button data-filter="grayscale" class="btn btn-secondary">Greyscale</button>
+                        <button data-filter="invert" class="btn btn-secondary">Invert</button>
+                        <button data-action="reset-filters" class="btn btn-secondary">Reset All Adjustments</button>
                     </div>
                 </div>
+                
                 <div class="control-group">
-                    <h3>Adjustments</h3>
-                    <div class="control-item">
-                        <div class="label-container"><label for="contrast-slider">Contrast</label><span class="slider-value">100%</span></div>
-                        <input type="range" data-adjustment="contrast" id="contrast-slider" min="0" max="200" value="100">
-                    </div>
-                    <div class="control-item">
-                        <div class="label-container"><label for="saturation-slider">Saturation</label><span class="slider-value">100%</span></div>
-                        <input type="range" data-adjustment="saturate" id="saturation-slider" min="0" max="200" value="100">
-                    </div>
+                    <h3>Exposure</h3>
                     <div class="control-item">
                         <div class="label-container"><label for="exposure-slider">Brightness</label><span class="slider-value">100%</span></div>
                         <input type="range" data-adjustment="brightness" id="exposure-slider" min="0" max="200" value="100">
                     </div>
                     <div class="control-item">
+                        <div class="label-container"><label for="contrast-slider">Contrast</label><span class="slider-value">100%</span></div>
+                        <input type="range" data-adjustment="contrast" id="contrast-slider" min="0" max="200" value="100">
+                    </div>
+                     <div class="control-item">
+                        <div class="label-container"><label for="highlights-slider">Highlights</label><span class="slider-value">0</span></div>
+                        <input type="range" data-adjustment="highlights" id="highlights-slider" min="-100" max="100" value="0" data-unit="">
+                    </div>
+                    <div class="control-item">
+                        <div class="label-container"><label for="shadows-slider">Shadows</label><span class="slider-value">0</span></div>
+                        <input type="range" data-adjustment="shadows" id="shadows-slider" min="-100" max="100" value="0" data-unit="">
+                    </div>
+                    <div class="control-item">
+                        <div class="label-container"><label for="white-point-slider">White Point</label><span class="slider-value">255</span></div>
+                        <input type="range" data-adjustment="white-point" id="white-point-slider" min="128" max="255" value="255" data-unit="">
+                    </div>
+                    <div class="control-item">
+                        <div class="label-container"><label for="black-point-slider">Black Point</label><span class="slider-value">0</span></div>
+                        <input type="range" data-adjustment="black-point" id="black-point-slider" min="0" max="127" value="0" data-unit="">
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <h3>Color & Effects</h3>
+                     <div class="control-item">
+                        <div class="label-container"><label for="saturation-slider">Saturation</label><span class="slider-value">100%</span></div>
+                        <input type="range" data-adjustment="saturate" id="saturation-slider" min="0" max="200" value="100">
+                    </div>
+                     <div class="control-item">
+                        <div class="label-container"><label for="warmth-slider">Warmth</label><span class="slider-value">0</span></div>
+                        <input type="range" data-adjustment="warmth" id="warmth-slider" min="-100" max="100" value="0" data-unit="">
+                    </div>
+                    <div class="control-item">
                         <div class="label-container"><label for="sharpness-slider">Sharpness</label><span class="slider-value">0%</span></div>
                         <input type="range" data-adjustment="sharpness" id="sharpness-slider" min="0" max="100" value="0">
+                    </div>
+                    <div class="control-item">
+                        <div class="label-container"><label for="blur-slider">Blur</label><span class="slider-value">0px</span></div>
+                        <input type="range" data-adjustment="blur" id="blur-slider" min="0" max="100" value="0" data-unit="px">
+                    </div>
+                    <div class="control-item">
+                        <div class="label-container"><label for="pixelate-slider">Pixelate</label><span class="slider-value">0px</span></div>
+                        <input type="range" data-adjustment="pixelate" id="pixelate-slider" min="0" max="100" value="0" data-unit="px">
+                    </div>
+                    <div class="control-item">
+                        <div class="label-container"><label for="vignette-slider">Vignette</label><span class="slider-value">0%</span></div>
+                        <input type="range" data-adjustment="vignette" id="vignette-slider" min="0" max="100" value="0" data-unit="%">
+                    </div>
+                    <div class="control-item">
+                        <div class="label-container"><label for="vignette-radius-slider">Vignette Center</label><span class="slider-value">70%</span></div>
+                        <input type="range" data-adjustment="vignette-radius" id="vignette-radius-slider" min="0" max="100" value="70" data-unit="%">
                     </div>
                 </div>
             </div>
@@ -351,7 +483,6 @@
         </div>
     </div>
 
-    <!-- ✨ ADDED: Modal for custom filename on save -->
     <div class="modal-overlay" id="save-modal">
         <div class="modal-dialog">
             <p>Enter a filename:</p>
@@ -370,6 +501,7 @@
             let dom = {
                 pageWrapper: document.getElementById('page-wrapper'),
                 canvas: document.getElementById('image-canvas'),
+                selectionCanvas: document.getElementById('selection-canvas'),
                 cropperImage: document.getElementById('cropper-image'),
                 fileInput: document.getElementById('file-input'),
                 filenameDisplay: document.getElementById('current-filename'),
@@ -384,7 +516,17 @@
                     contrast: document.getElementById('contrast-slider'),
                     saturate: document.getElementById('saturation-slider'),
                     brightness: document.getElementById('exposure-slider'),
-                    sharpness: document.getElementById('sharpness-slider')
+                    sharpness: document.getElementById('sharpness-slider'),
+                    blur: document.getElementById('blur-slider'),
+                    pixelate: document.getElementById('pixelate-slider'),
+                    warmth: document.getElementById('warmth-slider'),
+                    vignette: document.getElementById('vignette-slider'),
+                    vignetteRadius: document.getElementById('vignette-radius-slider'),
+                    shadows: document.getElementById('shadows-slider'),
+                    highlights: document.getElementById('highlights-slider'),
+                    blackPoint: document.getElementById('black-point-slider'),
+                    whitePoint: document.getElementById('white-point-slider'),
+                    lineThickness: document.getElementById('line-thickness-slider')
                 },
                 resizeW: document.getElementById('resize-w'),
                 resizeH: document.getElementById('resize-h'),
@@ -393,6 +535,10 @@
                     apply: document.querySelector('[data-action="apply-crop"]'),
                     cancel: document.querySelector('[data-action="cancel-crop"]')
                 },
+                selectionActions: document.getElementById('selection-actions'),
+                drawingActions: document.getElementById('drawing-actions'),
+                drawingColorPicker: document.getElementById('drawing-color'),
+                invertMaskToggle: document.getElementById('invert-mask-toggle'),
                 pdfModal: {
                     overlay: document.getElementById('pdf-page-modal'),
                     promptText: document.getElementById('pdf-page-prompt-text'),
@@ -400,18 +546,27 @@
                     confirmBtn: document.getElementById('pdf-page-confirm'),
                     cancelBtn: document.getElementById('pdf-page-cancel')
                 },
-                // ✨ ADDED: Save modal DOM elements
                 saveModal: {
                     overlay: document.getElementById('save-modal'),
                     input: document.getElementById('save-filename-input'),
                     confirmBtn: document.getElementById('save-confirm'),
                     cancelBtn: document.getElementById('save-cancel')
-                }
+                },
+                customRotateInput: document.getElementById('custom-rotate-input')
             };
 
             let state = {
                 isRendering: false,
                 isCropping: false,
+                isSelecting: false,
+                isDrawing: false,
+                drawingTool: null,
+                drawingHistory: [],
+                // ✨ MODIFIED: Changed to support multiple selections
+                selectionRects: [],
+                currentSelectionRect: null,
+                selectionStartPoint: null,
+                selectionInverted: false,
                 baseImage: null,
                 currentFilename: 'No file loaded',
                 cropper: null,
@@ -435,6 +590,8 @@
                     state.baseImage = img;
                     dom.canvas.width = img.width;
                     dom.canvas.height = img.height;
+                    dom.selectionCanvas.width = img.width;
+                    dom.selectionCanvas.height = img.height;
                     
                     if (filename) {
                         state.currentFilename = filename;
@@ -488,6 +645,79 @@
                 }
                 ctx.putImageData(output, 0, 0);
             };
+
+            const applyPixelate = (ctx, size) => {
+                if (size <= 0) return;
+                const w = ctx.canvas.width;
+                const h = ctx.canvas.height;
+                for (let y = 0; y < h; y += size) {
+                    for (let x = 0; x < w; x += size) {
+                        const pixel = ctx.getImageData(x, y, 1, 1).data;
+                        ctx.fillStyle = `rgba(${pixel[0]},${pixel[1]},${pixel[2]},${pixel[3]/255})`;
+                        ctx.fillRect(x, y, size, size);
+                    }
+                }
+            };
+
+            const applyWarmth = (ctx, value) => {
+                if (value === 0) return;
+                const amount = Math.abs(value) / 100;
+                const color = value > 0 ? `rgba(255, 165, 0, ${amount * 0.2})` : `rgba(0, 0, 255, ${amount * 0.2})`;
+                ctx.globalCompositeOperation = 'overlay';
+                ctx.fillStyle = color;
+                ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                ctx.globalCompositeOperation = 'source-over';
+            };
+
+            const applyVignette = (ctx, amountPercent, radiusPercent) => {
+                if (amountPercent <= 0) return;
+                const w = ctx.canvas.width;
+                const h = ctx.canvas.height;
+                const outerRadius = Math.sqrt(w*w + h*h) / 2;
+                const innerRadius = outerRadius * (radiusPercent / 100);
+                
+                const gradient = ctx.createRadialGradient(w/2, h/2, innerRadius, w/2, h/2, outerRadius);
+                gradient.addColorStop(0, 'rgba(0,0,0,0)');
+                gradient.addColorStop(1, `rgba(0,0,0,${0.8 * (amountPercent/100)})`);
+                
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, w, h);
+            };
+
+            const applyLevels = (ctx, shadows, highlights, blackPoint, whitePoint) => {
+                const imageData = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+                const data = imageData.data;
+                const shadowAmount = shadows / 100;
+                const highlightAmount = highlights / 100;
+
+                for (let i = 0; i < data.length; i += 4) {
+                    let r = data[i], g = data[i+1], b = data[i+2];
+
+                    const range = whitePoint - blackPoint;
+                    if (range > 0) {
+                        r = Math.max(0, Math.min(255, ((r - blackPoint) / range) * 255));
+                        g = Math.max(0, Math.min(255, ((g - blackPoint) / range) * 255));
+                        b = Math.max(0, Math.min(255, ((b - blackPoint) / range) * 255));
+                    }
+
+                    const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+                    if (shadowAmount !== 0 && luminance < 128) {
+                        const factor = 1 + shadowAmount * (1 - luminance / 128);
+                        r *= factor; g *= factor; b *= factor;
+                    }
+                    if (highlightAmount !== 0 && luminance >= 128) {
+                        const factor = 1 - highlightAmount * ((luminance - 128) / 127);
+                        r = r + (255 - r) * (1 - factor);
+                        g = g + (255 - g) * (1 - factor);
+                        b = b + (255 - b) * (1 - factor);
+                    }
+
+                    data[i] = Math.max(0, Math.min(255, r));
+                    data[i+1] = Math.max(0, Math.min(255, g));
+                    data[i+2] = Math.max(0, Math.min(255, b));
+                }
+                ctx.putImageData(imageData, 0, 0);
+            };
             
             const renderImageWithFilters = () => {
                 return new Promise(resolve => {
@@ -497,34 +727,80 @@
                     }
 
                     const ctx = dom.canvas.getContext('2d');
-                    
-                    let filterStrings = [];
-                    dom.sliders.all.forEach(slider => {
-                        if (slider.dataset.adjustment && slider.id !== 'sharpness-slider') {
-                            const adj = slider.dataset.adjustment;
-                            const val = slider.value;
-                            filterStrings.push(`${adj}(${val}%)`);
-                        }
-                    });
-                    
-                    if (state.filterToggles.grayscale) filterStrings.push('grayscale(100%)');
-                    if (state.filterToggles.invert) filterStrings.push('invert(100%)');
-
-                    ctx.filter = filterStrings.join(' ');
                     ctx.clearRect(0, 0, dom.canvas.width, dom.canvas.height);
                     ctx.drawImage(state.baseImage, 0, 0);
-                    ctx.filter = 'none';
 
-                    const sharpenValue = parseInt(dom.sliders.sharpness.value, 10);
-                    if (sharpenValue > 0) {
-                        const amount = sharpenValue / 100;
-                        const sharpenKernel = [
-                            0, -amount, 0,
-                            -amount, 1 + 4 * amount, -amount,
-                            0, -amount, 0
-                        ];
-                        applyConvolutionMatrix(ctx, sharpenKernel);
+                    const applyEffects = (targetCtx) => {
+                        let filterStrings = [];
+                        dom.sliders.all.forEach(slider => {
+                            if (slider.dataset.adjustment && !['sharpness', 'pixelate', 'warmth', 'vignette', 'vignette-radius', 'shadows', 'highlights', 'black-point', 'white-point'].includes(slider.dataset.adjustment)) {
+                                const adj = slider.dataset.adjustment;
+                                const val = slider.value;
+                                const unit = slider.dataset.unit || '%';
+                                filterStrings.push(`${adj}(${val}${unit})`);
+                            }
+                        });
+                        
+                        if (state.filterToggles.grayscale) filterStrings.push('grayscale(100%)');
+                        if (state.filterToggles.invert) filterStrings.push('invert(100%)');
+                        
+                        targetCtx.filter = filterStrings.join(' ');
+                        targetCtx.drawImage(state.baseImage, 0, 0);
+                        targetCtx.filter = 'none';
+
+                        const sharpenValue = parseInt(dom.sliders.sharpness.value, 10);
+                        if (sharpenValue > 0) {
+                            const amount = sharpenValue / 100;
+                            const sharpenKernel = [0, -amount, 0, -amount, 1 + 4 * amount, -amount, 0, -amount, 0];
+                            applyConvolutionMatrix(targetCtx, sharpenKernel);
+                        }
+
+                        const pixelateValue = parseInt(dom.sliders.pixelate.value, 10);
+                        if (pixelateValue > 0) {
+                            applyPixelate(targetCtx, pixelateValue);
+                        }
+
+                        const warmthValue = parseInt(dom.sliders.warmth.value, 10);
+                        applyWarmth(targetCtx, warmthValue);
+                        
+                        const shadows = parseInt(dom.sliders.shadows.value, 10);
+                        const highlights = parseInt(dom.sliders.highlights.value, 10);
+                        const blackPoint = parseInt(dom.sliders.blackPoint.value, 10);
+                        const whitePoint = parseInt(dom.sliders.whitePoint.value, 10);
+                        applyLevels(targetCtx, shadows, highlights, blackPoint, whitePoint);
+                    };
+
+                    // ✨ MODIFIED: Handle multiple selection rectangles
+                    if (state.selectionRects.length > 0) {
+                        const tempCanvas = document.createElement('canvas');
+                        const tempCtx = tempCanvas.getContext('2d');
+                        tempCanvas.width = dom.canvas.width;
+                        tempCanvas.height = dom.canvas.height;
+                        applyEffects(tempCtx);
+
+                        ctx.save();
+                        ctx.beginPath();
+                        if (state.selectionInverted) {
+                            ctx.rect(0, 0, dom.canvas.width, dom.canvas.height);
+                            state.selectionRects.forEach(rect => {
+                                ctx.rect(rect.x, rect.y, rect.w, rect.h);
+                            });
+                            ctx.clip("evenodd");
+                        } else {
+                            state.selectionRects.forEach(rect => {
+                                ctx.rect(rect.x, rect.y, rect.w, rect.h);
+                            });
+                            ctx.clip();
+                        }
+                        ctx.drawImage(tempCanvas, 0, 0);
+                        ctx.restore();
+                    } else {
+                        applyEffects(ctx);
                     }
+
+                    const vignetteAmount = parseInt(dom.sliders.vignette.value, 10);
+                    const vignetteRadius = parseInt(dom.sliders.vignetteRadius.value, 10);
+                    applyVignette(ctx, vignetteAmount, vignetteRadius);
 
                     resolve();
                 });
@@ -566,16 +842,21 @@
                 state.isCropping = false;
             };
             
-            const applyTransform = (action) => {
+            const applyTransform = (action, value = 0) => {
                 if (!state.baseImage) return;
                 
                 const tempCanvas = document.createElement('canvas');
                 const tempCtx = tempCanvas.getContext('2d');
                 let w = dom.canvas.width, h = dom.canvas.height;
 
-                if (action === 'rotate-left' || action === 'rotate-right') {
-                    [w, h] = [h, w];
+                if (action === 'rotate-left' || action === 'rotate-right' || action === 'rotate-custom') {
+                    const angle = (action === 'rotate-custom' ? value : (action === 'rotate-left' ? -90 : 90)) * Math.PI / 180;
+                    const sin = Math.abs(Math.sin(angle));
+                    const cos = Math.abs(Math.cos(angle));
+                    w = dom.canvas.width * cos + dom.canvas.height * sin;
+                    h = dom.canvas.width * sin + dom.canvas.height * cos;
                 }
+                
                 tempCanvas.width = w;
                 tempCanvas.height = h;
                 
@@ -583,6 +864,7 @@
                 switch(action) {
                     case 'rotate-left': tempCtx.rotate(-90 * Math.PI / 180); break;
                     case 'rotate-right': tempCtx.rotate(90 * Math.PI / 180); break;
+                    case 'rotate-custom': tempCtx.rotate(value * Math.PI / 180); break;
                     case 'flip-h': tempCtx.scale(-1, 1); break;
                     case 'flip-v': tempCtx.scale(1, -1); break;
                 }
@@ -623,8 +905,7 @@
             const updateSliderValue = (slider) => {
                 const valueDisplay = slider.parentElement.querySelector('.slider-value');
                 if (valueDisplay) {
-                    const isPercentage = slider.id.includes('slider');
-                    const unit = isPercentage ? '%' : '';
+                    const unit = slider.dataset.unit || '%';
                     valueDisplay.textContent = slider.value + unit;
                 }
             };
@@ -634,10 +915,17 @@
                 dom.sliders.saturate.value = 100;
                 dom.sliders.brightness.value = 100;
                 dom.sliders.sharpness.value = 0;
-                updateSliderValue(dom.sliders.contrast);
-                updateSliderValue(dom.sliders.saturate);
-                updateSliderValue(dom.sliders.brightness);
-                updateSliderValue(dom.sliders.sharpness);
+                dom.sliders.blur.value = 0;
+                dom.sliders.pixelate.value = 0;
+                dom.sliders.warmth.value = 0;
+                dom.sliders.vignette.value = 0;
+                dom.sliders.vignetteRadius.value = 70;
+                dom.sliders.shadows.value = 0;
+                dom.sliders.highlights.value = 0;
+                dom.sliders.blackPoint.value = 0;
+                dom.sliders.whitePoint.value = 255;
+                
+                document.querySelectorAll('.controls-panel input[type="range"]').forEach(updateSliderValue);
 
                 Object.keys(state.filterToggles).forEach(key => {
                     state.filterToggles[key] = false;
@@ -778,7 +1066,6 @@
                 e.target.value = null;
             });
 
-            // ✨ REWRITTEN: Save button now opens the custom filename modal
             dom.saveBtn.addEventListener('click', () => {
                 if (!state.baseImage) return;
 
@@ -787,7 +1074,6 @@
                 dom.saveModal.overlay.classList.add('visible');
             });
 
-            // ✨ ADDED: Event listeners for the new save modal
             dom.saveModal.cancelBtn.addEventListener('click', () => {
                 dom.saveModal.overlay.classList.remove('visible');
             });
@@ -848,6 +1134,32 @@
                         case 'flip-v':
                             applyTransform(action);
                             break;
+                        case 'rotate-custom':
+                            const value = parseFloat(dom.customRotateInput.value);
+                            if (!isNaN(value)) {
+                                applyTransform('rotate-custom', value);
+                            }
+                            break;
+                        case 'start-selection':
+                            state.isSelecting = true;
+                            dom.imageContainer.classList.add('is-selecting');
+                            break;
+                        case 'deselect':
+                            deselectArea();
+                            break;
+                        case 'apply-selection':
+                            applySelection();
+                            break;
+                        case 'add-rectangle':
+                        case 'add-line':
+                        case 'add-arrow':
+                            state.isDrawing = true;
+                            state.drawingTool = action;
+                            dom.imageContainer.classList.add('is-selecting');
+                            break;
+                        case 'undo-drawing':
+                            undoDrawing();
+                            break;
                     }
                 }
 
@@ -866,6 +1178,179 @@
                     if (slider === dom.sliders.resize) updateResizeDisplay();
                     if (slider.dataset.adjustment) onFilterChange();
                 });
+            });
+
+            const selectionCtx = dom.selectionCanvas.getContext('2d');
+            let isDrawingSelection = false;
+
+            const getMousePos = (e) => {
+                const rect = dom.canvas.getBoundingClientRect();
+                const scaleX = dom.canvas.width / rect.width;
+                const scaleY = dom.canvas.height / rect.height;
+                return {
+                    x: (e.clientX - rect.left) * scaleX,
+                    y: (e.clientY - rect.top) * scaleY
+                };
+            };
+            
+            // ✨ MODIFIED: Updated to handle multiple selections
+            const deselectArea = () => {
+                state.isSelecting = false;
+                state.selectionRects = [];
+                state.currentSelectionRect = null;
+                dom.imageContainer.classList.remove('is-selecting');
+                selectionCtx.clearRect(0, 0, dom.selectionCanvas.width, dom.selectionCanvas.height);
+                dom.selectionActions.style.display = 'none';
+                dom.invertMaskToggle.checked = false;
+                state.selectionInverted = false;
+                onFilterChange();
+            };
+
+            const applySelection = () => {
+                if (state.selectionRects.length === 0) return;
+                loadImage(dom.canvas.toDataURL());
+                deselectArea();
+            };
+            
+            const undoDrawing = () => {
+                if (state.drawingHistory.length > 0) {
+                    const lastState = state.drawingHistory.pop();
+                    loadImage(lastState);
+                }
+                if (state.drawingHistory.length === 0) {
+                    dom.drawingActions.style.display = 'none';
+                }
+            };
+
+            dom.invertMaskToggle.addEventListener('change', () => {
+                state.selectionInverted = dom.invertMaskToggle.checked;
+                onFilterChange();
+            });
+
+            // ✨ MODIFIED: `mousedown` now checks for Shift key
+            dom.selectionCanvas.addEventListener('mousedown', (e) => {
+                if (!state.isSelecting && !state.isDrawing) return;
+                
+                if (state.isSelecting) {
+                    isDrawingSelection = true;
+                    if (!e.shiftKey) {
+                        state.selectionRects = [];
+                    }
+                    state.selectionStartPoint = getMousePos(e);
+                    state.currentSelectionRect = null;
+                    dom.selectionActions.style.display = 'none';
+                } else if (state.isDrawing) {
+                    isDrawingSelection = true;
+                    state.selectionStartPoint = getMousePos(e);
+                    state.drawingHistory.push(dom.canvas.toDataURL());
+                    dom.drawingActions.style.display = 'flex';
+                }
+            });
+
+            // ✨ MODIFIED: `mousemove` now draws existing and current selections
+            dom.selectionCanvas.addEventListener('mousemove', (e) => {
+                if (!isDrawingSelection) return;
+                
+                const currentPos = getMousePos(e);
+                const start = state.selectionStartPoint;
+                
+                const x = Math.min(start.x, currentPos.x);
+                const y = Math.min(start.y, currentPos.y);
+                const w = Math.abs(start.x - currentPos.x);
+                const h = Math.abs(start.y - currentPos.y);
+                
+                selectionCtx.clearRect(0, 0, dom.selectionCanvas.width, dom.selectionCanvas.height);
+                
+                if (state.isSelecting) {
+                    state.currentSelectionRect = { x, y, w, h };
+                    selectionCtx.strokeStyle = "rgba(242, 184, 181, 0.9)";
+                    selectionCtx.lineWidth = 4;
+                    selectionCtx.setLineDash([10, 5]);
+
+                    // Draw already confirmed rectangles
+                    state.selectionRects.forEach(rect => {
+                        selectionCtx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+                    });
+                    // Draw the one currently being made
+                    selectionCtx.strokeRect(x, y, w, h);
+
+                } else if (state.isDrawing) {
+                    selectionCtx.strokeStyle = dom.drawingColorPicker.value;
+                    selectionCtx.lineWidth = dom.sliders.lineThickness.value;
+                    selectionCtx.setLineDash([]); // Solid line for drawing
+                    selectionCtx.beginPath();
+                    if (state.drawingTool === 'add-rectangle') {
+                        selectionCtx.rect(x, y, w, h);
+                    } else if (state.drawingTool === 'add-line') {
+                        selectionCtx.moveTo(start.x, start.y);
+                        selectionCtx.lineTo(currentPos.x, currentPos.y);
+                    } else if (state.drawingTool === 'add-arrow') {
+                        const headlen = parseInt(dom.sliders.lineThickness.value, 10) * 3;
+                        const dx = currentPos.x - start.x;
+                        const dy = currentPos.y - start.y;
+                        const angle = Math.atan2(dy, dx);
+                        selectionCtx.moveTo(start.x, start.y);
+                        selectionCtx.lineTo(currentPos.x, currentPos.y);
+                        selectionCtx.lineTo(currentPos.x - headlen * Math.cos(angle - Math.PI / 6), currentPos.y - headlen * Math.sin(angle - Math.PI / 6));
+                        selectionCtx.moveTo(currentPos.x, currentPos.y);
+                        selectionCtx.lineTo(currentPos.x - headlen * Math.cos(angle + Math.PI / 6), currentPos.y - headlen * Math.sin(angle + Math.PI / 6));
+                    }
+                    selectionCtx.stroke();
+                }
+            });
+
+            // ✨ MODIFIED: `mouseup` finalizes the current selection/drawing
+            dom.selectionCanvas.addEventListener('mouseup', (e) => {
+                if (!isDrawingSelection) return;
+                isDrawingSelection = false;
+
+                if (state.isSelecting) {
+                    if (state.currentSelectionRect && state.currentSelectionRect.w > 5 && state.currentSelectionRect.h > 5) {
+                        state.selectionRects.push(state.currentSelectionRect);
+                    }
+                    state.currentSelectionRect = null;
+
+                    if (state.selectionRects.length > 0) {
+                        dom.selectionActions.style.display = 'block';
+                        onFilterChange();
+                    } else {
+                        deselectArea();
+                    }
+                } else if (state.isDrawing) {
+                    const endPoint = getMousePos(e);
+                    const startPoint = state.selectionStartPoint;
+                    const mainCtx = dom.canvas.getContext('2d');
+                    mainCtx.strokeStyle = dom.drawingColorPicker.value;
+                    mainCtx.lineWidth = dom.sliders.lineThickness.value;
+                    mainCtx.beginPath();
+
+                    if (state.drawingTool === 'add-rectangle') {
+                        const w = endPoint.x - startPoint.x;
+                        const h = endPoint.y - startPoint.y;
+                        mainCtx.strokeRect(startPoint.x, startPoint.y, w, h);
+                    } else if (state.drawingTool === 'add-line') {
+                        mainCtx.moveTo(startPoint.x, startPoint.y);
+                        mainCtx.lineTo(endPoint.x, endPoint.y);
+                    } else if (state.drawingTool === 'add-arrow') {
+                        const headlen = parseInt(dom.sliders.lineThickness.value, 10) * 3;
+                        const dx = endPoint.x - startPoint.x;
+                        const dy = endPoint.y - startPoint.y;
+                        const angle = Math.atan2(dy, dx);
+                        mainCtx.moveTo(startPoint.x, startPoint.y);
+                        mainCtx.lineTo(endPoint.x, endPoint.y);
+                        mainCtx.lineTo(endPoint.x - headlen * Math.cos(angle - Math.PI / 6), endPoint.y - headlen * Math.sin(angle - Math.PI / 6));
+                        mainCtx.moveTo(endPoint.x, endPoint.y);
+                        mainCtx.lineTo(endPoint.x - headlen * Math.cos(angle + Math.PI / 6), endPoint.y - headlen * Math.sin(angle + Math.PI / 6));
+                    }
+                    mainCtx.stroke();
+                    
+                    state.baseImage.src = dom.canvas.toDataURL();
+                    
+                    state.isDrawing = false;
+                    state.drawingTool = null;
+                    dom.imageContainer.classList.remove('is-selecting');
+                    selectionCtx.clearRect(0, 0, dom.selectionCanvas.width, dom.selectionCanvas.height);
+                }
             });
             
             updateResizeDisplay();
