@@ -4,12 +4,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Easy Image Editor 2.1</title>
+    <title>Easy Image Editor 2.8</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
     <script src="https://unpkg.com/utif@3.1.0/UTIF.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css">
 
@@ -73,7 +74,6 @@
             gap: 8px;
             color: var(--md-dark-on-surface-variant);
             font-size: 14px;
-            margin-right: auto;
         }
         .zoom-control-header input[type="range"] {
             width: 150px;
@@ -92,6 +92,7 @@
             overflow: hidden; 
             text-overflow: ellipsis;
             flex-shrink: 1;
+            margin-left: auto;
         }
         .main-content { 
             display: flex; 
@@ -125,9 +126,13 @@
             left: 0;
             pointer-events: none;
         }
-        #image-container.is-selecting #selection-canvas {
+        #image-container.is-selecting #selection-canvas,
+        #image-container.is-cloning #selection-canvas {
             pointer-events: auto;
             cursor: crosshair;
+        }
+        #image-container.is-cloning.source-set #selection-canvas {
+             cursor: none;
         }
         .controls-panel {
             width: 320px; 
@@ -199,8 +204,14 @@
             background-color: var(--md-dark-primary); 
             color: var(--md-dark-on-primary); 
         }
-        .btn:hover { 
+        .btn:hover:not(:disabled) { 
             filter: brightness(1.1); 
+        }
+        .btn:disabled {
+            background-color: var(--md-dark-outline);
+            color: var(--md-dark-on-surface-variant);
+            cursor: not-allowed;
+            border-color: var(--md-dark-outline);
         }
         #file-input { 
             display: none; 
@@ -296,7 +307,6 @@
             justify-content: space-between;
             width: 100%;
         }
-        /* ✨ ADDED: Style for the multi-select hint */
         .selection-hint {
             font-size: 12px;
             color: var(--md-dark-on-surface-variant);
@@ -304,19 +314,69 @@
             text-align: center;
             width: 100%;
         }
+        .accordion-toggle {
+            cursor: pointer;
+            position: relative;
+        }
+        .accordion-toggle::after {
+            content: '▼';
+            position: absolute;
+            right: 5px;
+            top: 50%;
+            transform: translateY(-50%) rotate(0deg);
+            transition: transform 0.3s ease;
+            font-size: 12px;
+        }
+        .accordion-toggle.is-expanded::after {
+            transform: translateY(-50%) rotate(180deg);
+        }
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+            border-top: 1px solid transparent;
+            padding: 0 5px;
+        }
+        .accordion-content.is-expanded {
+            max-height: 250px; /* Adjust as needed */
+            overflow-y: auto;
+            border-top: 1px solid var(--md-dark-outline);
+            padding: 15px 5px 0 5px;
+        }
+        .metadata-row {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 10px;
+        }
+        .metadata-row label {
+            font-size: 12px;
+            color: var(--md-dark-on-surface-variant);
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+        .metadata-row input {
+            width: 100%;
+            background-color: var(--md-dark-background);
+            border: 1px solid var(--md-dark-outline);
+            color: var(--md-dark-on-surface);
+            border-radius: 4px;
+            padding: 6px;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
     <div class="page-wrapper" id="page-wrapper">
         <header>
-            <!-- ✨ MODIFIED: Title updated -->
-            <h1>Easy Image Editor 2.1</h1>
+            <h1>Easy Image Editor 2.7</h1>
             <div class="header-controls">
                 <div class="zoom-control-header">
                     <label for="zoom-slider">Zoom</label>
                     <input type="range" id="zoom-slider" min="10" max="300" value="100">
                     <span class="slider-value">100%</span>
                 </div>
+                <button id="undo-btn" class="btn btn-secondary" disabled>Undo</button>
+                <button id="redo-btn" class="btn btn-secondary" disabled>Redo</button>
                 <p id="current-filename">No file loaded</p>
                 <label for="file-input" class="btn">Load Image</label>
                 <input type="file" id="file-input" accept="image/jpeg, image/png, image/webp, image/tiff, image/bmp, image/gif, application/pdf">
@@ -367,7 +427,6 @@
                     <div class="btn-group">
                         <button data-action="start-selection" class="btn btn-secondary">Select Area</button>
                     </div>
-                    <!-- ✨ ADDED: Hint for multi-selection -->
                     <p class="selection-hint">Hold Shift to select multiple areas.</p>
                     <div id="selection-actions" style="margin-top: 10px; display: none;">
                         <div class="toggle-switch">
@@ -378,6 +437,23 @@
                            <button data-action="apply-selection" class="btn">Apply Filters to Selection</button>
                            <button data-action="deselect" class="btn btn-secondary">Deselect</button>
                         </div>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <h3>Retouch</h3>
+                    <div class="btn-group">
+                        <button data-action="start-clone" class="btn btn-secondary">Clone Brush</button>
+                    </div>
+                    <div id="clone-tool-options" style="display: none;">
+                         <div class="control-item" style="margin-top: 16px;">
+                            <div class="label-container"><label for="brush-size-slider">Brush Size</label><span class="slider-value">20px</span></div>
+                            <input type="range" id="brush-size-slider" min="5" max="500" value="20" data-unit="px">
+                        </div>
+                        <div class="control-item">
+                            <div class="label-container"><label for="brush-smoothness-slider">Brush Smoothness</label><span class="slider-value">50%</span></div>
+                            <input type="range" id="brush-smoothness-slider" min="0" max="100" value="50" data-unit="%">
+                        </div>
+                        <p class="selection-hint">Alt+Click to set source, then paint.</p>
                     </div>
                 </div>
                 <div class="control-group">
@@ -395,8 +471,11 @@
                         <div class="label-container"><label for="line-thickness-slider">Line Thickness</label><span class="slider-value">5px</span></div>
                         <input type="range" id="line-thickness-slider" min="1" max="50" value="5" data-unit="px">
                     </div>
-                    <div id="drawing-actions" class="btn-group" style="display: none;">
-                        <button data-action="undo-drawing" class="btn btn-secondary">Undo Drawing</button>
+                </div>
+                <div class="control-group">
+                    <h3 id="metadata-toggle" class="accordion-toggle">Metadata</h3>
+                    <div id="metadata-content" class="accordion-content">
+                        <!-- EXIF data will be populated here by JS -->
                     </div>
                 </div>
                 <div class="control-group">
@@ -498,6 +577,12 @@
         document.addEventListener('DOMContentLoaded', () => {
             pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js`;
 
+            const brushCanvas = document.createElement('canvas');
+            const brushCtx = brushCanvas.getContext('2d', { willReadFrequently: true });
+            
+            const filterCacheCanvas = document.createElement('canvas');
+            const filterCacheCtx = filterCacheCanvas.getContext('2d', { willReadFrequently: true });
+
             let dom = {
                 pageWrapper: document.getElementById('page-wrapper'),
                 canvas: document.getElementById('image-canvas'),
@@ -526,7 +611,9 @@
                     highlights: document.getElementById('highlights-slider'),
                     blackPoint: document.getElementById('black-point-slider'),
                     whitePoint: document.getElementById('white-point-slider'),
-                    lineThickness: document.getElementById('line-thickness-slider')
+                    lineThickness: document.getElementById('line-thickness-slider'),
+                    brushSize: document.getElementById('brush-size-slider'),
+                    brushSmoothness: document.getElementById('brush-smoothness-slider')
                 },
                 resizeW: document.getElementById('resize-w'),
                 resizeH: document.getElementById('resize-h'),
@@ -536,9 +623,17 @@
                     cancel: document.querySelector('[data-action="cancel-crop"]')
                 },
                 selectionActions: document.getElementById('selection-actions'),
-                drawingActions: document.getElementById('drawing-actions'),
-                drawingColorPicker: document.getElementById('drawing-color'),
+                cloneToolOptions: document.getElementById('clone-tool-options'),
+                historyActions: {
+                    undo: document.getElementById('undo-btn'),
+                    redo: document.getElementById('redo-btn')
+                },
                 invertMaskToggle: document.getElementById('invert-mask-toggle'),
+                drawingColorPicker: document.getElementById('drawing-color'),
+                metadata: {
+                    toggle: document.getElementById('metadata-toggle'),
+                    content: document.getElementById('metadata-content')
+                },
                 pdfModal: {
                     overlay: document.getElementById('pdf-page-modal'),
                     promptText: document.getElementById('pdf-page-prompt-text'),
@@ -560,13 +655,17 @@
                 isCropping: false,
                 isSelecting: false,
                 isDrawing: false,
+                isCloning: false,
+                canvasIsDirty: false,
                 drawingTool: null,
-                drawingHistory: [],
-                // ✨ MODIFIED: Changed to support multiple selections
+                undoStack: [],
+                redoStack: [],
                 selectionRects: [],
                 currentSelectionRect: null,
                 selectionStartPoint: null,
                 selectionInverted: false,
+                cloneSource: null,
+                clonePaintOffset: null,
                 baseImage: null,
                 currentFilename: 'No file loaded',
                 cropper: null,
@@ -574,7 +673,8 @@
                     grayscale: false,
                     invert: false
                 },
-                filterDebounceTimer: null
+                filterDebounceTimer: null,
+                rafId: null
             };
 
             const setUILocked = (isLocked) => {
@@ -583,7 +683,7 @@
 
             // --- CORE IMAGE HANDLING ---
 
-            const loadImage = (src, filename) => {
+            const loadImage = (src, filename, fileObject) => {
                 setUILocked(true);
                 const img = new Image();
                 img.onload = () => {
@@ -592,14 +692,26 @@
                     dom.canvas.height = img.height;
                     dom.selectionCanvas.width = img.width;
                     dom.selectionCanvas.height = img.height;
+                    filterCacheCanvas.width = img.width;
+                    filterCacheCanvas.height = img.height;
                     
                     if (filename) {
                         state.currentFilename = filename;
                         dom.filenameDisplay.textContent = filename;
                     }
                     
+                    if (fileObject && fileObject.type === 'image/jpeg') {
+                        EXIF.getData(fileObject, function() {
+                            const allTags = EXIF.getAllTags(this);
+                            populateMetadata(allTags);
+                        });
+                    } else {
+                        populateMetadata(null);
+                    }
+
                     resetAllControls();
-                    renderImageWithFilters().then(() => setUILocked(false));
+                    updateAndRender().then(() => setUILocked(false));
+                    state.canvasIsDirty = false;
                 };
                 img.onerror = () => {
                     alert('Could not load image. Please try another file.');
@@ -608,6 +720,22 @@
                 img.src = src;
             };
             
+            const commitCanvasToBaseImage = () => {
+                return new Promise(resolve => {
+                    if (!state.canvasIsDirty || !state.baseImage) {
+                        resolve();
+                        return;
+                    }
+                    const newBaseImage = new Image();
+                    newBaseImage.onload = () => {
+                        state.baseImage = newBaseImage;
+                        state.canvasIsDirty = false;
+                        resolve();
+                    };
+                    newBaseImage.src = dom.canvas.toDataURL();
+                });
+            };
+
             const applyConvolutionMatrix = (ctx, weights) => {
                 const pixels = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
                 const side = Math.round(Math.sqrt(weights.length));
@@ -719,97 +847,96 @@
                 ctx.putImageData(imageData, 0, 0);
             };
             
-            const renderImageWithFilters = () => {
-                return new Promise(resolve => {
-                    if (!state.baseImage) {
-                        resolve();
-                        return;
+            const updateFilterCache = () => {
+                if (!state.baseImage) return;
+                
+                filterCacheCtx.clearRect(0, 0, filterCacheCanvas.width, filterCacheCanvas.height);
+                filterCacheCtx.drawImage(state.baseImage, 0, 0);
+
+                let filterStrings = [];
+                dom.sliders.all.forEach(slider => {
+                    if (slider.dataset.adjustment && !['sharpness', 'pixelate', 'warmth', 'vignette', 'vignette-radius', 'shadows', 'highlights', 'black-point', 'white-point'].includes(slider.dataset.adjustment)) {
+                        const adj = slider.dataset.adjustment;
+                        const val = slider.value;
+                        const unit = slider.dataset.unit || '%';
+                        filterStrings.push(`${adj}(${val}${unit})`);
                     }
-
-                    const ctx = dom.canvas.getContext('2d');
-                    ctx.clearRect(0, 0, dom.canvas.width, dom.canvas.height);
-                    ctx.drawImage(state.baseImage, 0, 0);
-
-                    const applyEffects = (targetCtx) => {
-                        let filterStrings = [];
-                        dom.sliders.all.forEach(slider => {
-                            if (slider.dataset.adjustment && !['sharpness', 'pixelate', 'warmth', 'vignette', 'vignette-radius', 'shadows', 'highlights', 'black-point', 'white-point'].includes(slider.dataset.adjustment)) {
-                                const adj = slider.dataset.adjustment;
-                                const val = slider.value;
-                                const unit = slider.dataset.unit || '%';
-                                filterStrings.push(`${adj}(${val}${unit})`);
-                            }
-                        });
-                        
-                        if (state.filterToggles.grayscale) filterStrings.push('grayscale(100%)');
-                        if (state.filterToggles.invert) filterStrings.push('invert(100%)');
-                        
-                        targetCtx.filter = filterStrings.join(' ');
-                        targetCtx.drawImage(state.baseImage, 0, 0);
-                        targetCtx.filter = 'none';
-
-                        const sharpenValue = parseInt(dom.sliders.sharpness.value, 10);
-                        if (sharpenValue > 0) {
-                            const amount = sharpenValue / 100;
-                            const sharpenKernel = [0, -amount, 0, -amount, 1 + 4 * amount, -amount, 0, -amount, 0];
-                            applyConvolutionMatrix(targetCtx, sharpenKernel);
-                        }
-
-                        const pixelateValue = parseInt(dom.sliders.pixelate.value, 10);
-                        if (pixelateValue > 0) {
-                            applyPixelate(targetCtx, pixelateValue);
-                        }
-
-                        const warmthValue = parseInt(dom.sliders.warmth.value, 10);
-                        applyWarmth(targetCtx, warmthValue);
-                        
-                        const shadows = parseInt(dom.sliders.shadows.value, 10);
-                        const highlights = parseInt(dom.sliders.highlights.value, 10);
-                        const blackPoint = parseInt(dom.sliders.blackPoint.value, 10);
-                        const whitePoint = parseInt(dom.sliders.whitePoint.value, 10);
-                        applyLevels(targetCtx, shadows, highlights, blackPoint, whitePoint);
-                    };
-
-                    // ✨ MODIFIED: Handle multiple selection rectangles
-                    if (state.selectionRects.length > 0) {
-                        const tempCanvas = document.createElement('canvas');
-                        const tempCtx = tempCanvas.getContext('2d');
-                        tempCanvas.width = dom.canvas.width;
-                        tempCanvas.height = dom.canvas.height;
-                        applyEffects(tempCtx);
-
-                        ctx.save();
-                        ctx.beginPath();
-                        if (state.selectionInverted) {
-                            ctx.rect(0, 0, dom.canvas.width, dom.canvas.height);
-                            state.selectionRects.forEach(rect => {
-                                ctx.rect(rect.x, rect.y, rect.w, rect.h);
-                            });
-                            ctx.clip("evenodd");
-                        } else {
-                            state.selectionRects.forEach(rect => {
-                                ctx.rect(rect.x, rect.y, rect.w, rect.h);
-                            });
-                            ctx.clip();
-                        }
-                        ctx.drawImage(tempCanvas, 0, 0);
-                        ctx.restore();
-                    } else {
-                        applyEffects(ctx);
-                    }
-
-                    const vignetteAmount = parseInt(dom.sliders.vignette.value, 10);
-                    const vignetteRadius = parseInt(dom.sliders.vignetteRadius.value, 10);
-                    applyVignette(ctx, vignetteAmount, vignetteRadius);
-
-                    resolve();
                 });
+                
+                if (state.filterToggles.grayscale) filterStrings.push('grayscale(100%)');
+                if (state.filterToggles.invert) filterStrings.push('invert(100%)');
+                
+                filterCacheCtx.filter = filterStrings.join(' ');
+                filterCacheCtx.drawImage(state.baseImage, 0, 0);
+                filterCacheCtx.filter = 'none';
+
+                const sharpenValue = parseInt(dom.sliders.sharpness.value, 10);
+                if (sharpenValue > 0) {
+                    const amount = sharpenValue / 100;
+                    const sharpenKernel = [0, -amount, 0, -amount, 1 + 4 * amount, -amount, 0, -amount, 0];
+                    applyConvolutionMatrix(filterCacheCtx, sharpenKernel);
+                }
+
+                const pixelateValue = parseInt(dom.sliders.pixelate.value, 10);
+                if (pixelateValue > 0) {
+                    applyPixelate(filterCacheCtx, pixelateValue);
+                }
+
+                const warmthValue = parseInt(dom.sliders.warmth.value, 10);
+                applyWarmth(filterCacheCtx, warmthValue);
+                
+                const shadows = parseInt(dom.sliders.shadows.value, 10);
+                const highlights = parseInt(dom.sliders.highlights.value, 10);
+                const blackPoint = parseInt(dom.sliders.blackPoint.value, 10);
+                const whitePoint = parseInt(dom.sliders.whitePoint.value, 10);
+                applyLevels(filterCacheCtx, shadows, highlights, blackPoint, whitePoint);
+
+                const vignetteAmount = parseInt(dom.sliders.vignette.value, 10);
+                const vignetteRadius = parseInt(dom.sliders.vignetteRadius.value, 10);
+                applyVignette(filterCacheCtx, vignetteAmount, vignetteRadius);
+            };
+
+            const redrawFromCache = () => {
+                if (!state.baseImage) return;
+                const mainCtx = dom.canvas.getContext('2d');
+                mainCtx.clearRect(0, 0, dom.canvas.width, dom.canvas.height);
+
+                if (state.selectionRects.length === 0) {
+                    mainCtx.drawImage(filterCacheCanvas, 0, 0);
+                } else {
+                    mainCtx.drawImage(state.baseImage, 0, 0);
+                    mainCtx.save();
+                    mainCtx.beginPath();
+                    if (state.selectionInverted) {
+                        mainCtx.rect(0, 0, dom.canvas.width, dom.canvas.height);
+                        state.selectionRects.forEach(rect => {
+                            mainCtx.rect(rect.x, rect.y, rect.w, rect.h);
+                        });
+                        mainCtx.clip("evenodd");
+                    } else {
+                        state.selectionRects.forEach(rect => {
+                            mainCtx.rect(rect.x, rect.y, rect.w, rect.h);
+                        });
+                        mainCtx.clip();
+                    }
+                    mainCtx.drawImage(filterCacheCanvas, 0, 0);
+                    mainCtx.restore();
+                }
+            };
+
+            const updateAndRender = async () => {
+                setUILocked(true);
+                await commitCanvasToBaseImage();
+                updateFilterCache();
+                redrawFromCache();
+                setUILocked(false);
             };
 
             // --- DESTRUCTIVE ACTIONS (Crop, Rotate, Resize) ---
 
-            const startCrop = () => {
+            const startCrop = async () => {
                 if (!state.baseImage || state.isCropping) return;
+                await commitCanvasToBaseImage();
                 state.isCropping = true;
                 
                 dom.canvas.style.display = 'none';
@@ -827,6 +954,7 @@
                 if (!state.isCropping) return;
                 
                 if (applyChange) {
+                    pushStateToHistory();
                     const croppedCanvas = state.cropper.getCroppedCanvas();
                     loadImage(croppedCanvas.toDataURL());
                 }
@@ -842,8 +970,10 @@
                 state.isCropping = false;
             };
             
-            const applyTransform = (action, value = 0) => {
+            const applyTransform = async (action, value = 0) => {
                 if (!state.baseImage) return;
+                await commitCanvasToBaseImage();
+                pushStateToHistory();
                 
                 const tempCanvas = document.createElement('canvas');
                 const tempCtx = tempCanvas.getContext('2d');
@@ -873,8 +1003,10 @@
                 loadImage(tempCanvas.toDataURL());
             };
 
-            const applyResize = () => {
+            const applyResize = async () => {
                 if (!state.baseImage) return;
+                await commitCanvasToBaseImage();
+                pushStateToHistory();
                 
                 const scale = parseInt(dom.sliders.resize.value, 10) / 100;
                 const sourceCanvas = dom.canvas;
@@ -894,12 +1026,7 @@
 
             const onFilterChange = () => {
                 clearTimeout(state.filterDebounceTimer);
-                state.filterDebounceTimer = setTimeout(() => {
-                    setUILocked(true);
-                    renderImageWithFilters().then(() => {
-                        setUILocked(false);
-                    });
-                }, 50);
+                state.filterDebounceTimer = setTimeout(updateAndRender, 50);
             };
 
             const updateSliderValue = (slider) => {
@@ -991,6 +1118,46 @@
                 dom.pdfModal.confirmBtn.addEventListener('click', confirmHandler);
                 dom.pdfModal.cancelBtn.addEventListener('click', cancelHandler);
             };
+            
+            const deactivateAllTools = async () => {
+                await commitCanvasToBaseImage();
+                state.isSelecting = false;
+                state.isDrawing = false;
+                state.isCloning = false;
+                dom.imageContainer.classList.remove('is-selecting', 'is-cloning', 'source-set');
+                dom.cloneToolOptions.style.display = 'none';
+                if (state.isCropping) endCrop(false);
+            };
+
+            const populateMetadata = (tags) => {
+                const content = dom.metadata.content;
+                content.innerHTML = '';
+                if (!tags || Object.keys(tags).length === 0) {
+                    content.innerHTML = '<p class="selection-hint">No metadata found.</p>';
+                    return;
+                }
+
+                for (const tagName in tags) {
+                    if (Object.hasOwnProperty.call(tags, tagName)) {
+                        const value = tags[tagName];
+                        if (typeof value === 'object' || tagName === 'thumbnail') continue;
+
+                        const row = document.createElement('div');
+                        row.className = 'metadata-row';
+
+                        const label = document.createElement('label');
+                        label.textContent = tagName;
+                        
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.value = value;
+                        
+                        row.appendChild(label);
+                        row.appendChild(input);
+                        content.appendChild(row);
+                    }
+                }
+            };
 
             // --- Bind Event Listeners ---
 
@@ -1049,7 +1216,7 @@
                             imageData.data.set(new Uint8ClampedArray(rgba));
                             tempCtx.putImageData(imageData, 0, 0);
 
-                            loadImage(tempCanvas.toDataURL(), file.name);
+                            loadImage(tempCanvas.toDataURL(), file.name, file);
                         } catch (err) {
                             console.error(err);
                             alert('Could not load the TIFF file. It may be corrupt or in an unsupported format.');
@@ -1058,7 +1225,7 @@
                     reader.readAsArrayBuffer(file);
                 } else if (file.type.startsWith('image/')) {
                     const reader = new FileReader();
-                    reader.onload = (re) => loadImage(re.target.result, file.name);
+                    reader.onload = (re) => loadImage(re.target.result, file.name, file);
                     reader.readAsDataURL(file);
                 } else {
                     alert('Please select a valid image file (JPG, PNG, WEBP, TIFF, BMP, GIF, PDF).');
@@ -1066,8 +1233,9 @@
                 e.target.value = null;
             });
 
-            dom.saveBtn.addEventListener('click', () => {
+            dom.saveBtn.addEventListener('click', async () => {
                 if (!state.baseImage) return;
+                await commitCanvasToBaseImage();
 
                 const baseName = state.currentFilename.split('.')[0];
                 dom.saveModal.input.value = `edited-${baseName}`;
@@ -1111,12 +1279,16 @@
                 dom.saveModal.overlay.classList.remove('visible');
             });
 
-            dom.controlsPanel.addEventListener('click', (e) => {
+            dom.controlsPanel.addEventListener('click', async (e) => {
                 if (e.target.tagName !== 'BUTTON') return;
                 const action = e.target.dataset.action;
                 const filter = e.target.dataset.filter;
 
                 if (action) {
+                    if (action !== 'apply-crop' && action !== 'cancel-crop' && action !== 'apply-resize' && action !== 'apply-selection' && action !== 'deselect' && action !== 'undo' ) {
+                         await deactivateAllTools();
+                    }
+
                     switch (action) {
                         case 'start-crop': startCrop(); break;
                         case 'apply-crop': endCrop(true); break;
@@ -1150,6 +1322,11 @@
                         case 'apply-selection':
                             applySelection();
                             break;
+                        case 'start-clone':
+                            state.isCloning = true;
+                            dom.imageContainer.classList.add('is-cloning');
+                            dom.cloneToolOptions.style.display = 'block';
+                            break;
                         case 'add-rectangle':
                         case 'add-line':
                         case 'add-arrow':
@@ -1157,8 +1334,8 @@
                             state.drawingTool = action;
                             dom.imageContainer.classList.add('is-selecting');
                             break;
-                        case 'undo-drawing':
-                            undoDrawing();
+                        case 'undo':
+                            undoLastAction();
                             break;
                     }
                 }
@@ -1180,8 +1357,8 @@
                 });
             });
 
-            const selectionCtx = dom.selectionCanvas.getContext('2d');
-            let isDrawingSelection = false;
+            const selectionCtx = dom.selectionCanvas.getContext('2d', { willReadFrequently: true });
+            let isPainting = false;
 
             const getMousePos = (e) => {
                 const rect = dom.canvas.getBoundingClientRect();
@@ -1193,7 +1370,6 @@
                 };
             };
             
-            // ✨ MODIFIED: Updated to handle multiple selections
             const deselectArea = () => {
                 state.isSelecting = false;
                 state.selectionRects = [];
@@ -1203,36 +1379,89 @@
                 dom.selectionActions.style.display = 'none';
                 dom.invertMaskToggle.checked = false;
                 state.selectionInverted = false;
-                onFilterChange();
+                redrawFromCache();
             };
 
-            const applySelection = () => {
+            const applySelection = async () => {
                 if (state.selectionRects.length === 0) return;
-                loadImage(dom.canvas.toDataURL());
-                deselectArea();
+                
+                pushStateToHistory(); // ✨ FIX: Save state before applying selection
+                const newBaseImage = new Image();
+                newBaseImage.onload = () => {
+                    state.baseImage = newBaseImage;
+                    deselectArea();
+                    updateAndRender();
+                }
+                newBaseImage.src = dom.canvas.toDataURL();
             };
             
-            const undoDrawing = () => {
-                if (state.drawingHistory.length > 0) {
-                    const lastState = state.drawingHistory.pop();
-                    loadImage(lastState);
-                }
-                if (state.drawingHistory.length === 0) {
-                    dom.drawingActions.style.display = 'none';
+            const undoLastAction = () => {
+                if (state.undoStack.length > 0) {
+                    state.redoStack.push(state.baseImage);
+                    const lastImage = state.undoStack.pop();
+                    // ✨ FIX: Call loadImage to handle canvas resizing correctly
+                    loadImage(lastImage.src); 
+                    updateUndoRedoButtons();
                 }
             };
+
+            const redoLastAction = () => {
+                if (state.redoStack.length > 0) {
+                    state.undoStack.push(state.baseImage);
+                    const nextImage = state.redoStack.pop();
+                    // ✨ FIX: Call loadImage to handle canvas resizing correctly
+                    loadImage(nextImage.src);
+                    updateUndoRedoButtons();
+                }
+            };
+
+            const pushStateToHistory = () => {
+                state.redoStack = [];
+                state.undoStack.push(state.baseImage);
+                if (state.undoStack.length > 20) {
+                    state.undoStack.shift();
+                }
+                updateUndoRedoButtons();
+            };
+
+            const updateUndoRedoButtons = () => {
+                dom.historyActions.undo.disabled = state.undoStack.length === 0;
+                dom.historyActions.redo.disabled = state.redoStack.length === 0;
+            };
+
+            dom.historyActions.undo.addEventListener('click', undoLastAction);
+            dom.historyActions.redo.addEventListener('click', redoLastAction);
 
             dom.invertMaskToggle.addEventListener('change', () => {
                 state.selectionInverted = dom.invertMaskToggle.checked;
-                onFilterChange();
+                redrawFromCache();
             });
 
-            // ✨ MODIFIED: `mousedown` now checks for Shift key
-            dom.selectionCanvas.addEventListener('mousedown', (e) => {
-                if (!state.isSelecting && !state.isDrawing) return;
+            dom.metadata.toggle.addEventListener('click', () => {
+                dom.metadata.toggle.classList.toggle('is-expanded');
+                dom.metadata.content.classList.toggle('is-expanded');
+            });
+
+            dom.selectionCanvas.addEventListener('mousedown', async (e) => {
+                if (!state.isSelecting && !state.isDrawing && !state.isCloning) return;
+                e.preventDefault();
                 
-                if (state.isSelecting) {
-                    isDrawingSelection = true;
+                if (state.isCloning) {
+                    if (e.altKey) {
+                        await commitCanvasToBaseImage();
+                        state.cloneSource = getMousePos(e);
+                        dom.imageContainer.classList.add('source-set');
+                        return;
+                    }
+                    if (state.cloneSource) {
+                        isPainting = true;
+                        const paintStart = getMousePos(e);
+                        state.clonePaintOffset = { x: paintStart.x - state.cloneSource.x, y: paintStart.y - state.cloneSource.y };
+                        pushStateToHistory(); // ✨ FIX: Push history at the start of a stroke
+                    }
+                } else if (state.isSelecting) {
+                    await commitCanvasToBaseImage();
+                    isPainting = true;
                     if (!e.shiftKey) {
                         state.selectionRects = [];
                     }
@@ -1240,71 +1469,129 @@
                     state.currentSelectionRect = null;
                     dom.selectionActions.style.display = 'none';
                 } else if (state.isDrawing) {
-                    isDrawingSelection = true;
+                    await commitCanvasToBaseImage();
+                    isPainting = true;
                     state.selectionStartPoint = getMousePos(e);
-                    state.drawingHistory.push(dom.canvas.toDataURL());
-                    dom.drawingActions.style.display = 'flex';
+                    pushStateToHistory(); // ✨ FIX: Push history at the start of a drawing
                 }
             });
 
-            // ✨ MODIFIED: `mousemove` now draws existing and current selections
             dom.selectionCanvas.addEventListener('mousemove', (e) => {
-                if (!isDrawingSelection) return;
-                
-                const currentPos = getMousePos(e);
-                const start = state.selectionStartPoint;
-                
-                const x = Math.min(start.x, currentPos.x);
-                const y = Math.min(start.y, currentPos.y);
-                const w = Math.abs(start.x - currentPos.x);
-                const h = Math.abs(start.y - currentPos.y);
-                
+                const mousePos = getMousePos(e);
                 selectionCtx.clearRect(0, 0, dom.selectionCanvas.width, dom.selectionCanvas.height);
+
+                if (state.isCloning) {
+                    const brushSize = parseInt(dom.sliders.brushSize.value, 10);
+                    
+                    selectionCtx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                    selectionCtx.lineWidth = 1;
+                    selectionCtx.setLineDash([]);
+                    selectionCtx.beginPath();
+                    selectionCtx.arc(mousePos.x, mousePos.y, brushSize / 2, 0, Math.PI * 2);
+                    selectionCtx.stroke();
+                    
+                    if (state.cloneSource) {
+                        const offset = state.clonePaintOffset || { x: mousePos.x - state.cloneSource.x, y: mousePos.y - state.cloneSource.y };
+                        const sourceX = mousePos.x - offset.x;
+                        const sourceY = mousePos.y - offset.y;
+                        selectionCtx.strokeStyle = 'rgba(242, 184, 181, 0.8)';
+                        selectionCtx.beginPath();
+                        selectionCtx.arc(sourceX, sourceY, brushSize / 2, 0, Math.PI * 2);
+                        selectionCtx.stroke();
+                    }
+                }
                 
                 if (state.isSelecting) {
-                    state.currentSelectionRect = { x, y, w, h };
                     selectionCtx.strokeStyle = "rgba(242, 184, 181, 0.9)";
                     selectionCtx.lineWidth = 4;
                     selectionCtx.setLineDash([10, 5]);
 
-                    // Draw already confirmed rectangles
                     state.selectionRects.forEach(rect => {
                         selectionCtx.strokeRect(rect.x, rect.y, rect.w, rect.h);
                     });
-                    // Draw the one currently being made
-                    selectionCtx.strokeRect(x, y, w, h);
+
+                    if (isPainting) {
+                        const start = state.selectionStartPoint;
+                        const x = Math.min(start.x, mousePos.x);
+                        const y = Math.min(start.y, mousePos.y);
+                        const w = Math.abs(start.x - mousePos.x);
+                        const h = Math.abs(start.y - mousePos.y);
+                        state.currentSelectionRect = { x, y, w, h };
+                        selectionCtx.strokeRect(x, y, w, h);
+                    }
+                }
+
+                if (!isPainting) return;
+                
+                if (state.isCloning) {
+                    const mainCtx = dom.canvas.getContext('2d', { willReadFrequently: true });
+                    const brushSize = parseInt(dom.sliders.brushSize.value, 10);
+                    const brushRadius = brushSize / 2;
+                    const smoothness = parseInt(dom.sliders.brushSmoothness.value, 10) / 100;
+
+                    const destX = mousePos.x;
+                    const destY = mousePos.y;
+                    const sourceX = destX - state.clonePaintOffset.x;
+                    const sourceY = destY - state.clonePaintOffset.y;
+
+                    brushCanvas.width = brushSize;
+                    brushCanvas.height = brushSize;
+                    
+                    brushCtx.clearRect(0, 0, brushSize, brushSize);
+                    brushCtx.drawImage(dom.canvas, sourceX - brushRadius, sourceY - brushRadius, brushSize, brushSize, 0, 0, brushSize, brushSize);
+
+                    brushCtx.globalCompositeOperation = 'destination-in';
+                    const gradient = brushCtx.createRadialGradient(brushRadius, brushRadius, brushRadius * (1 - smoothness), brushRadius, brushRadius, brushRadius);
+                    gradient.addColorStop(0, 'rgba(0,0,0,1)');
+                    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+                    brushCtx.fillStyle = gradient;
+                    brushCtx.fillRect(0, 0, brushSize, brushSize);
+                    brushCtx.globalCompositeOperation = 'source-over';
+
+                    mainCtx.drawImage(brushCanvas, destX - brushRadius, destY - brushRadius);
 
                 } else if (state.isDrawing) {
+                    const start = state.selectionStartPoint;
+                    const x = Math.min(start.x, mousePos.x);
+                    const y = Math.min(start.y, mousePos.y);
+                    const w = Math.abs(start.x - mousePos.x);
+                    const h = Math.abs(start.y - mousePos.y);
+                    
                     selectionCtx.strokeStyle = dom.drawingColorPicker.value;
                     selectionCtx.lineWidth = dom.sliders.lineThickness.value;
-                    selectionCtx.setLineDash([]); // Solid line for drawing
+                    selectionCtx.setLineDash([]);
                     selectionCtx.beginPath();
                     if (state.drawingTool === 'add-rectangle') {
                         selectionCtx.rect(x, y, w, h);
                     } else if (state.drawingTool === 'add-line') {
                         selectionCtx.moveTo(start.x, start.y);
-                        selectionCtx.lineTo(currentPos.x, currentPos.y);
+                        selectionCtx.lineTo(mousePos.x, mousePos.y);
                     } else if (state.drawingTool === 'add-arrow') {
                         const headlen = parseInt(dom.sliders.lineThickness.value, 10) * 3;
-                        const dx = currentPos.x - start.x;
-                        const dy = currentPos.y - start.y;
+                        const dx = mousePos.x - start.x;
+                        const dy = mousePos.y - start.y;
                         const angle = Math.atan2(dy, dx);
                         selectionCtx.moveTo(start.x, start.y);
-                        selectionCtx.lineTo(currentPos.x, currentPos.y);
-                        selectionCtx.lineTo(currentPos.x - headlen * Math.cos(angle - Math.PI / 6), currentPos.y - headlen * Math.sin(angle - Math.PI / 6));
-                        selectionCtx.moveTo(currentPos.x, currentPos.y);
-                        selectionCtx.lineTo(currentPos.x - headlen * Math.cos(angle + Math.PI / 6), currentPos.y - headlen * Math.sin(angle + Math.PI / 6));
+                        selectionCtx.lineTo(mousePos.x, mousePos.y);
+                        selectionCtx.lineTo(mousePos.x - headlen * Math.cos(angle - Math.PI / 6), mousePos.y - headlen * Math.sin(angle - Math.PI / 6));
+                        selectionCtx.moveTo(mousePos.x, mousePos.y);
+                        selectionCtx.lineTo(mousePos.x - headlen * Math.cos(angle + Math.PI / 6), mousePos.y - headlen * Math.sin(angle + Math.PI / 6));
                     }
                     selectionCtx.stroke();
                 }
             });
 
-            // ✨ MODIFIED: `mouseup` finalizes the current selection/drawing
             dom.selectionCanvas.addEventListener('mouseup', (e) => {
-                if (!isDrawingSelection) return;
-                isDrawingSelection = false;
+                if (!isPainting) return;
+                isPainting = false;
 
-                if (state.isSelecting) {
+                if (state.isCloning || state.isDrawing) {
+                    state.canvasIsDirty = true;
+                }
+
+                if (state.isCloning) {
+                    state.clonePaintOffset = null;
+                } else if (state.isSelecting) {
                     if (state.currentSelectionRect && state.currentSelectionRect.w > 5 && state.currentSelectionRect.h > 5) {
                         state.selectionRects.push(state.currentSelectionRect);
                     }
@@ -1312,47 +1599,27 @@
 
                     if (state.selectionRects.length > 0) {
                         dom.selectionActions.style.display = 'block';
-                        onFilterChange();
+                        redrawFromCache();
                     } else {
                         deselectArea();
                     }
                 } else if (state.isDrawing) {
-                    const endPoint = getMousePos(e);
-                    const startPoint = state.selectionStartPoint;
-                    const mainCtx = dom.canvas.getContext('2d');
-                    mainCtx.strokeStyle = dom.drawingColorPicker.value;
-                    mainCtx.lineWidth = dom.sliders.lineThickness.value;
-                    mainCtx.beginPath();
-
-                    if (state.drawingTool === 'add-rectangle') {
-                        const w = endPoint.x - startPoint.x;
-                        const h = endPoint.y - startPoint.y;
-                        mainCtx.strokeRect(startPoint.x, startPoint.y, w, h);
-                    } else if (state.drawingTool === 'add-line') {
-                        mainCtx.moveTo(startPoint.x, startPoint.y);
-                        mainCtx.lineTo(endPoint.x, endPoint.y);
-                    } else if (state.drawingTool === 'add-arrow') {
-                        const headlen = parseInt(dom.sliders.lineThickness.value, 10) * 3;
-                        const dx = endPoint.x - startPoint.x;
-                        const dy = endPoint.y - startPoint.y;
-                        const angle = Math.atan2(dy, dx);
-                        mainCtx.moveTo(startPoint.x, startPoint.y);
-                        mainCtx.lineTo(endPoint.x, endPoint.y);
-                        mainCtx.lineTo(endPoint.x - headlen * Math.cos(angle - Math.PI / 6), endPoint.y - headlen * Math.sin(angle - Math.PI / 6));
-                        mainCtx.moveTo(endPoint.x, endPoint.y);
-                        mainCtx.lineTo(endPoint.x - headlen * Math.cos(angle + Math.PI / 6), endPoint.y - headlen * Math.sin(angle + Math.PI / 6));
-                    }
-                    mainCtx.stroke();
-                    
-                    state.baseImage.src = dom.canvas.toDataURL();
+                    const mainCtx = dom.canvas.getContext('2d', { willReadFrequently: true });
+                    mainCtx.drawImage(dom.selectionCanvas, 0, 0);
+                    selectionCtx.clearRect(0, 0, dom.selectionCanvas.width, dom.selectionCanvas.height);
                     
                     state.isDrawing = false;
                     state.drawingTool = null;
                     dom.imageContainer.classList.remove('is-selecting');
-                    selectionCtx.clearRect(0, 0, dom.selectionCanvas.width, dom.selectionCanvas.height);
                 }
             });
             
+            dom.selectionCanvas.addEventListener('mouseleave', () => {
+                if (state.isCloning && !isPainting) {
+                    selectionCtx.clearRect(0, 0, dom.selectionCanvas.width, dom.selectionCanvas.height);
+                }
+            });
+
             updateResizeDisplay();
         });
     </script>
