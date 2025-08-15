@@ -1397,7 +1397,10 @@
             
             const undoLastAction = () => {
                 if (state.undoStack.length > 0) {
-                    state.redoStack.push(state.baseImage);
+                    const redoImage = new Image();
+                    redoImage.src = dom.canvas.toDataURL();
+                    state.redoStack.push(redoImage);
+
                     const lastImage = state.undoStack.pop();
                     // ✨ FIX: Call loadImage to handle canvas resizing correctly
                     loadImage(lastImage.src); 
@@ -1457,6 +1460,7 @@
                         isPainting = true;
                         const paintStart = getMousePos(e);
                         state.clonePaintOffset = { x: paintStart.x - state.cloneSource.x, y: paintStart.y - state.cloneSource.y };
+                        await commitCanvasToBaseImage();
                         pushStateToHistory(); // ✨ FIX: Push history at the start of a stroke
                     }
                 } else if (state.isSelecting) {
