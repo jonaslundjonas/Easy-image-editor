@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ProEdit 5.1 - Layers & Advanced Filters</title>
+    <title>Kretz Image Editor Pro</title>
     
     <!-- External Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
@@ -385,7 +385,7 @@
         <div style="display: flex; align-items: center; gap: 15px;">
             <div class="app-title">
                 <i class="ph-fill ph-layers"></i>
-                <span>ProEdit 5.1</span>
+                <span>Kretz Image Editor Pro</span>
                 <span class="loader" id="global-loader"></span>
             </div>
             
@@ -677,6 +677,10 @@
             <div id="meta-content" class="sidebar-content hidden" style="font-family: monospace; font-size: 11px; color: var(--text-muted); white-space: pre-wrap; overflow-x: hidden;">
                 No Exif data.
             </div>
+        </div>
+        <!-- Credit -->
+        <div style="padding: 20px; text-align: center; color: #666; font-size: 11px; margin-top: auto;">
+            Created by Jonas Lund 2025
         </div>
     </aside>
 
@@ -1965,11 +1969,6 @@ const App = {
             if(['rect', 'line', 'arrow'].includes(tool)) canvasWrap.classList.add('is-drawing');
             if(['sel-rect', 'sel-oval', 'sel-lasso'].includes(tool)) canvasWrap.classList.add('is-selecting');
             if(tool === 'sel-wand') canvasWrap.classList.add('is-selecting');
-
-            // Hide clone source indicator if switching away from clone tool
-            if (tool !== 'clone') {
-                document.getElementById('clone-source-indicator').style.display = 'none';
-            }
 
             if(tool === 'crop') this.startCrop();
             else {
