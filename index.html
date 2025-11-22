@@ -69,11 +69,11 @@
             position: absolute;
             left: 0; 
             background-color: var(--bg-panel);
-            min-width: 160px; /* Increased slightly */
+            min-width: 160px; 
             box-shadow: 0 8px 16px rgba(0,0,0,0.5);
             border: 1px solid var(--border);
             border-radius: var(--radius);
-            z-index: 2000; /* Higher z-index to sit above everything */
+            z-index: 2000; 
             top: 100%;
             margin-top: 4px; 
         }
@@ -477,6 +477,7 @@
     <aside class="toolbar">
         <button class="tool-btn active" id="tool-move" title="Move Layer (Hold Space to Pan)" data-tool="move"><i class="ph ph-arrows-out"></i></button>
         <button class="tool-btn" id="tool-crop" title="Crop (Global)" data-tool="crop"><i class="ph ph-crop"></i></button>
+        <button class="tool-btn" id="tool-zoom" title="Zoom Tool" data-tool="zoom"><i class="ph ph-magnifying-glass"></i></button>
         
         <div style="height: 1px; background: var(--border); width: 60%;"></div>
         <!-- Selection Tools -->
@@ -500,8 +501,7 @@
         <button class="tool-btn" id="tool-draw-arrow" title="Draw Arrow" data-tool="arrow"><i class="ph ph-arrow-up-right"></i></button>
         
         <div style="margin-top: auto;"></div>
-        <button class="tool-btn" id="btn-undo" disabled title="Undo (Ctrl+Z)"><i class="ph ph-arrow-u-up-left"></i></button>
-        <button class="tool-btn" id="btn-redo" disabled title="Redo (Ctrl+Y)"><i class="ph ph-arrow-u-up-right"></i></button>
+        <!-- Removed Undo/Redo buttons from left panel -->
     </aside>
 
     <!-- CANVAS -->
@@ -637,7 +637,36 @@
             </div>
         </div>
 
-        <!-- Removed Transform Sidebar Section -->
+        <!-- Transform & Resize -->
+        <div class="sidebar-section">
+            <div class="sidebar-header" onclick="toggleSection('trans-content')">
+                <span>Transform Layer</span> <i class="ph ph-caret-down"></i>
+            </div>
+            <div id="trans-content" class="sidebar-content">
+                <div class="btn-grid">
+                    <button class="btn" data-cmd="rotate-l" title="-90 deg"><i class="ph ph-arrow-counter-clockwise"></i> -90°</button>
+                    <button class="btn" data-cmd="rotate-r" title="+90 deg"><i class="ph ph-arrow-clockwise"></i> +90°</button>
+                    <button class="btn" data-cmd="flip-h" title="Flip H"><i class="ph ph-arrows-left-right"></i> Flip H</button>
+                    <button class="btn" data-cmd="flip-v" title="Flip V"><i class="ph ph-arrows-down-up"></i> Flip V</button>
+                </div>
+                <div class="control-group" style="margin-top:5px;">
+                    <div class="control-label"><span>Custom Rotation (deg)</span></div>
+                    <div style="display:flex; gap:5px;">
+                        <input type="number" id="custom-rot-val" value="0" placeholder="Angle">
+                        <button class="btn" onclick="App.UI.applyCustomRotation()">Apply</button>
+                    </div>
+                </div>
+                <hr style="border:0; border-top:1px solid var(--border); width:100%;">
+                <div class="control-group">
+                    <div class="control-label"><span>Global Resize (px)</span></div>
+                    <div class="btn-grid">
+                        <input type="number" id="resize-w" placeholder="Width">
+                        <input type="number" id="resize-h" placeholder="Height">
+                    </div>
+                    <button class="btn" style="margin-top:5px;" onclick="App.UI.applyResize()">Apply Resize</button>
+                </div>
+            </div>
+        </div>
 
          <!-- Meta -->
         <div class="sidebar-section" style="border-bottom: none;">
@@ -731,7 +760,6 @@
 
 <script>
 const App = {
-    // ... existing State ...
     State: {
         width: 800,
         height: 600,
@@ -744,7 +772,7 @@ const App = {
         lastMouse: { x: 0, y: 0 },
         drawStart: { x: 0, y: 0 },
         isSpacePressed: false,
-        dragMode: null, 
+        dragMode: null, // 'pan' or 'layer'
         
         layers: [], 
         activeLayerId: null,
@@ -756,7 +784,7 @@ const App = {
         
         selection: {
             active: false,
-            mask: null,
+            mask: null, // Canvas element
             type: null,
             wandTolerance: 30
         },
@@ -773,7 +801,7 @@ const App = {
         cropper: null
     },
 
-    // ... existing Layers ...
+    // --- LAYERS LOGIC ---
     Layers: {
         createId() { return 'layer_' + (++App.State.layerCounter); },
         
@@ -873,6 +901,7 @@ const App = {
             ctx.save();
             ctx.globalAlpha = top.opacity / 100;
             ctx.globalCompositeOperation = top.blendMode;
+            // Apply active selection mask if exists? No, merge usually ignores selection
             ctx.drawImage(top.canvas, 0, 0);
             ctx.restore();
 
@@ -905,7 +934,7 @@ const App = {
         }
     },
 
-    // ... existing Render ...
+    // --- RENDERING (COMPOSITOR) ---
     Render: {
         update() {
             const canvas = document.getElementById('main-canvas');
@@ -955,7 +984,7 @@ const App = {
         }
     },
 
-    // ... existing Filters ...
+    // --- FILTERS (Per Layer Engine) ---
     Filters: {
         apply(key, value) {
             const layer = App.Layers.getActive();
@@ -1063,7 +1092,7 @@ const App = {
         }
     },
 
-    // ... existing Input Output ...
+    // --- INPUT / OUTPUT ---
     IO: {
         init() {
             const dropZone = document.getElementById('drop-zone');
@@ -1111,7 +1140,6 @@ const App = {
                 App.Layers.addLayer(img, name);
                 App.UI.updateTransform();
                 App.UI.updateFilename(App.State.filename);
-                App.UI.toggleHistoryBtns();
                 App.UI.setBusy(false);
                 document.getElementById('btn-compare').disabled = false;
             };
@@ -1209,7 +1237,7 @@ const App = {
         }
     },
 
-    // ... existing Tools ...
+    // --- TOOLS ---
     Tools: {
         init() {
             const area = document.getElementById('canvas-area');
@@ -1237,13 +1265,8 @@ const App = {
                 }
             });
 
-            area.addEventListener('wheel', e => {
-                if(App.State.layers.length === 0) return;
-                e.preventDefault();
-                const delta = e.deltaY > 0 ? 0.9 : 1.1;
-                App.State.zoom = Math.min(Math.max(0.05, App.State.zoom * delta), 10);
-                App.UI.updateTransform();
-            });
+            // Disable scroll zoom as requested
+            // area.addEventListener('wheel', e => { ... }); 
         },
 
         getImgPos(e) {
@@ -1348,7 +1371,11 @@ const App = {
                     App.UI.updateTransform();
                 } else if (App.State.dragMode === 'layer') {
                     const layer = App.Layers.getActive();
-                    if(layer) {
+                    // Check if bottom layer (index length-1 because reversed rendering?)
+                    // Our layers array: 0 is TOP, length-1 is BOTTOM
+                    const isBase = App.State.layers.indexOf(layer) === App.State.layers.length - 1;
+                    
+                    if(layer && !isBase) {
                         layer.x += dx / App.State.zoom;
                         layer.y += dy / App.State.zoom;
                         App.Render.update();
@@ -1794,8 +1821,9 @@ const App = {
                 b.addEventListener('click', () => this.selectTool(b.dataset.tool));
             });
 
-            document.getElementById('btn-undo').addEventListener('click', () => App.History.undo());
-            document.getElementById('btn-redo').addEventListener('click', () => App.History.redo());
+            // REMOVE THESE LINES
+            // document.getElementById('btn-undo').addEventListener('click', () => App.History.undo());
+            // document.getElementById('btn-redo').addEventListener('click', () => App.History.redo());
 
             document.querySelectorAll('button[data-cmd]').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -1973,6 +2001,15 @@ const App = {
                 }
             } else if (tool === 'crop') {
                 html += `<button class="btn btn-primary" onclick="App.UI.applyCrop()">Apply Crop</button>`;
+            } else if (tool === 'zoom') {
+                // Zoom Slider Logic
+                const currentZoom = Math.round(App.State.zoom * 100);
+                html += `
+                    <div class="control-group">
+                        <div class="control-label"><span>Zoom Level</span> <span id="lbl-zoom">${currentZoom}%</span></div>
+                        <input type="range" id="opt-zoom" value="${currentZoom}" min="25" max="600">
+                    </div>
+                `;
             }
 
             content.innerHTML = html;
@@ -1989,6 +2026,17 @@ const App = {
             if(bopac) bopac.addEventListener('input', e => { App.State.toolSettings.brushOpacity = parseInt(e.target.value); document.getElementById('lbl-bopac').innerText = e.target.value + "%"; });
             const tol = document.getElementById('opt-tol');
             if(tol) tol.addEventListener('input', e => { App.State.selection.wandTolerance = parseInt(e.target.value); document.getElementById('lbl-tol').innerText = e.target.value; });
+            
+            // Zoom Slider Listener
+            const zSlider = document.getElementById('opt-zoom');
+            if(zSlider) {
+                zSlider.addEventListener('input', e => {
+                    const val = parseInt(e.target.value);
+                    document.getElementById('lbl-zoom').innerText = val + "%";
+                    App.State.zoom = val / 100;
+                    App.UI.updateTransform();
+                });
+            }
         },
 
         renderLayerList() {
@@ -2123,10 +2171,7 @@ const App = {
         updateFilename(name) { document.getElementById('filename-display').innerText = name; },
         setBusy(busy) { document.getElementById('global-loader').style.display = busy ? 'inline-block' : 'none'; },
         
-        toggleHistoryBtns() {
-            document.getElementById('btn-undo').disabled = App.State.historyIndex <= 0;
-            document.getElementById('btn-redo').disabled = App.State.historyIndex >= App.State.history.length - 1;
-        }
+        // Removed toggleHistoryBtns function as buttons are gone
     },
 
     // --- HISTORY ---
@@ -2150,7 +2195,7 @@ const App = {
             App.State.history = App.State.history.slice(0, App.State.historyIndex + 1);
             App.State.history.push(globalState);
             App.State.historyIndex = App.State.history.length - 1;
-            App.UI.toggleHistoryBtns();
+            // Removed toggleHistoryBtns call
         },
         
         restore(state) {
@@ -2203,14 +2248,12 @@ const App = {
             if(App.State.historyIndex > 0) {
                 App.State.historyIndex--;
                 this.restore(App.State.history[App.State.historyIndex]);
-                App.UI.toggleHistoryBtns();
             }
         },
         redo() {
             if(App.State.historyIndex < App.State.history.length - 1) {
                 App.State.historyIndex++;
                 this.restore(App.State.history[App.State.historyIndex]);
-                App.UI.toggleHistoryBtns();
             }
         }
     }
