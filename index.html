@@ -1,1627 +1,1349 @@
 <!DOCTYPE html>
 <html lang="en">
-<!-- Created and written by Jonas Lund 2025 -->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Easy Image Editor 2.8</title>
+    <title>ProEdit 4.0 - Professional Image Editor</title>
     
+    <!-- External Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
     <script src="https://unpkg.com/utif@3.1.0/UTIF.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
+    <!-- Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css">
-
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 
     <style>
-        /* CSS variables for easy theme management (Material Design dark theme) */
         :root {
-            --md-dark-background: #1c1b1f; 
-            --md-dark-surface: #2b2930;
-            --md-dark-primary: #f2b8b5;
-            --md-dark-on-primary: #601410;
-            --md-dark-on-surface: #e6e1e5; 
-            --md-dark-on-surface-variant: #cac4d0;
-            --md-dark-outline: #49454f; 
-            --md-dark-slider-track: #49454f;
+            --bg-app: #09090b;
+            --bg-panel: #18181b;
+            --bg-surface: #27272a;
+            --border: #3f3f46;
+            --accent: #6366f1; /* Indigo */
+            --accent-hover: #4f46e5;
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+            --radius: 6px;
         }
-        * { box-sizing: border-box; }
+
+        * { box-sizing: border-box; outline: none; user-select: none; }
+
         body {
-            background-color: var(--md-dark-background); 
-            color: var(--md-dark-on-surface);
-            font-family: 'Roboto', sans-serif; 
-            margin: 0; 
-            display: flex;
-            flex-direction: column; 
-            height: 100vh; 
+            background-color: var(--bg-app);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: grid;
+            grid-template-columns: 60px 1fr 320px;
+            grid-template-rows: 50px 1fr;
+            grid-template-areas: 
+                "header header header"
+                "tools canvas sidebar";
             overflow: hidden;
         }
-        .page-wrapper { 
-            display: flex; 
-            flex-direction: column; 
-            height: 100%; 
-            padding: 20px; 
-        }
+
+        /* --- HEADER --- */
         header {
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center;
-            padding-bottom: 20px; 
-            border-bottom: 1px solid var(--md-dark-outline); 
-            flex-shrink: 0;
-            gap: 20px;
-        }
-        header h1 { 
-            margin: 0; 
-            font-weight: 500; 
-            font-size: 24px; 
-            white-space: nowrap;
-        }
-        .header-controls { 
-            display: flex; 
-            align-items: center; 
-            gap: 15px; 
-            width: 100%;
-        }
-        .zoom-control-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--md-dark-on-surface-variant);
-            font-size: 14px;
-        }
-        .zoom-control-header input[type="range"] {
-            width: 150px;
-        }
-        .zoom-control-header .slider-value {
-            min-width: 40px;
-            text-align: left;
-            color: var(--md-dark-on-surface-variant);
-        }
-        #current-filename {
-            text-align: right; 
-            margin: 0;
-            font-size: 14px; 
-            color: var(--md-dark-on-surface-variant);
-            white-space: nowrap; 
-            overflow: hidden; 
-            text-overflow: ellipsis;
-            flex-shrink: 1;
-            margin-left: auto;
-        }
-        .main-content { 
-            display: flex; 
-            gap: 20px; 
-            flex-grow: 1; 
-            padding-top: 20px; 
-            min-height: 0; 
-        }
-        .canvas-wrapper {
-            flex-grow: 1; 
-            background-color: var(--md-dark-surface);
-            border-radius: 12px; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center;
-            border: 1px solid var(--md-dark-outline); 
-            overflow: auto;
-            position: relative;
-        }
-        #image-container { 
-            position: relative; 
-        }
-        #image-canvas, #cropper-image {
-            max-width: initial; 
-            max-height: initial;
-            transition: transform 0.1s ease-out;
-        }
-        #selection-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            pointer-events: none;
-        }
-        #image-container.is-selecting #selection-canvas,
-        #image-container.is-cloning #selection-canvas {
-            pointer-events: auto;
-            cursor: crosshair;
-        }
-        #image-container.is-cloning.source-set #selection-canvas {
-             cursor: none;
-        }
-        .controls-panel {
-            width: 320px; 
-            flex-shrink: 0; 
-            background-color: var(--md-dark-surface);
-            border-radius: 12px; 
-            padding: 20px; 
-            overflow-y: auto;
-            border: 1px solid var(--md-dark-outline);
-            transition: opacity 0.3s ease, filter 0.3s ease;
-        }
-        .control-group { 
-            margin-bottom: 24px; 
-        }
-        .control-group h3 {
-            margin: 0 0 16px 0; 
-            font-size: 16px; 
-            font-weight: 500;
-            color: var(--md-dark-on-surface); 
-            border-bottom: 1px solid var(--md-dark-outline);
-            padding-bottom: 8px;
-        }
-        .control-item { 
-            display: flex; 
-            flex-direction: column; 
-            margin-bottom: 16px; 
-        }
-        .label-container { 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            margin-bottom: 8px; 
-        }
-        .slider-value { 
-            font-size: 14px; 
-            color: var(--md-dark-on-surface); 
-            min-width: 45px; 
-            text-align: right; 
-        }
-        .dimensions-display { 
-            font-size: 12px; 
-            color: var(--md-dark-on-surface-variant); 
-            text-align: center; 
-        }
-        .btn-group { 
-            display: flex; 
-            gap: 10px; 
-            flex-wrap: wrap; 
-        }
-        .btn {
-            background-color: var(--md-dark-primary); 
-            color: var(--md-dark-on-primary);
-            border: none; 
-            padding: 12px; 
-            border-radius: 20px; 
-            font-size: 14px;
-            font-weight: 700; 
-            cursor: pointer; 
-            transition: background-color 0.3s ease, filter 0.3s ease;
-            flex-grow: 1; 
-            text-align: center;
-        }
-        .btn-secondary {
-            background-color: var(--md-dark-surface); 
-            color: var(--md-dark-primary);
-            border: 1px solid var(--md-dark-primary);
-        }
-        .btn.active { 
-            background-color: var(--md-dark-primary); 
-            color: var(--md-dark-on-primary); 
-        }
-        .btn:hover:not(:disabled) { 
-            filter: brightness(1.1); 
-        }
-        .btn:disabled {
-            background-color: var(--md-dark-outline);
-            color: var(--md-dark-on-surface-variant);
-            cursor: not-allowed;
-            border-color: var(--md-dark-outline);
-        }
-        #file-input { 
-            display: none; 
-        }
-        input[type="range"] {
-            -webkit-appearance: none; 
-            width: 100%; 
-            height: 4px; 
-            background: var(--md-dark-slider-track);
-            outline: none; 
-            border-radius: 2px; 
-            margin-top: 0;
-        }
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none; 
-            appearance: none; 
-            width: 20px; 
-            height: 20px;
-            background: var(--md-dark-primary); 
-            cursor: pointer; 
-            border-radius: 50%;
-        }
-        select {
-            background-color: var(--md-dark-surface); 
-            color: var(--md-dark-on-surface);
-            border: 1px solid var(--md-dark-outline); 
-            padding: 10px; 
-            border-radius: 8px;
-            font-family: 'Roboto', sans-serif; 
-            font-size: 14px;
-        }
-        footer {
-            flex-shrink: 0; 
-            padding-top: 20px; 
-            text-align: center;
-            color: var(--md-dark-on-surface-variant); 
-            font-size: 14px;
-        }
-        .ui-locked .controls-panel, .ui-locked .header-controls {
-            pointer-events: none;
-            opacity: 0.5;
-            filter: blur(1px);
-        }
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.3s ease;
-        }
-        .modal-overlay.visible {
-            opacity: 1;
-            pointer-events: auto;
-        }
-        .modal-dialog {
-            background-color: var(--md-dark-surface);
-            padding: 25px;
-            border-radius: 12px;
-            border: 1px solid var(--md-dark-outline);
-            width: 90%;
-            max-width: 350px;
-            text-align: center;
-        }
-        .modal-dialog p {
-            margin: 0 0 15px 0;
-        }
-        .modal-dialog input, .control-item input[type="text"], .control-item input[type="color"] {
-            width: 100%;
-            padding: 10px;
-            border-radius: 8px;
-            border: 1px solid var(--md-dark-outline);
-            background-color: var(--md-dark-background);
-            color: var(--md-dark-on-surface);
-            font-size: 16px;
-            text-align: center;
-            margin-bottom: 10px;
-        }
-        .control-item input[type="color"] {
-            padding: 2px;
-            height: 40px;
-        }
-        .toggle-switch {
+            grid-area: header;
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            width: 100%;
+            padding: 0 20px;
+            font-size: 14px;
         }
-        .selection-hint {
-            font-size: 12px;
-            color: var(--md-dark-on-surface-variant);
-            margin-top: 8px;
-            text-align: center;
-            width: 100%;
-        }
-        .accordion-toggle {
-            cursor: pointer;
-            position: relative;
-        }
-        .accordion-toggle::after {
-            content: '▼';
-            position: absolute;
-            right: 5px;
-            top: 50%;
-            transform: translateY(-50%) rotate(0deg);
-            transition: transform 0.3s ease;
-            font-size: 12px;
-        }
-        .accordion-toggle.is-expanded::after {
-            transform: translateY(-50%) rotate(180deg);
-        }
-        .accordion-content {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease-out, padding 0.3s ease-out;
-            border-top: 1px solid transparent;
-            padding: 0 5px;
-        }
-        .accordion-content.is-expanded {
-            max-height: 250px; /* Adjust as needed */
-            overflow-y: auto;
-            border-top: 1px solid var(--md-dark-outline);
-            padding: 15px 5px 0 5px;
-        }
-        .metadata-row {
+        .app-title { font-weight: 600; letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px; }
+        .app-title i { color: var(--accent); font-size: 18px; }
+        .file-info { color: var(--text-muted); font-size: 12px; }
+
+        /* --- TOOLBAR (Left) --- */
+        .toolbar {
+            grid-area: tools;
+            background: var(--bg-panel);
+            border-right: 1px solid var(--border);
             display: flex;
             flex-direction: column;
-            margin-bottom: 10px;
+            align-items: center;
+            padding: 15px 0;
+            gap: 10px;
         }
-        .metadata-row label {
-            font-size: 12px;
-            color: var(--md-dark-on-surface-variant);
-            margin-bottom: 4px;
-            font-weight: 500;
+        .tool-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: transparent;
+            border: none;
+            position: relative;
         }
-        .metadata-row input {
-            width: 100%;
-            background-color: var(--md-dark-background);
-            border: 1px solid var(--md-dark-outline);
-            color: var(--md-dark-on-surface);
+        .tool-btn:hover { color: var(--text-main); background: var(--bg-surface); }
+        .tool-btn.active { color: white; background: var(--accent); }
+        .tool-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        
+        .tool-btn::after {
+            content: attr(title);
+            position: absolute;
+            left: 45px;
+            background: black;
+            color: white;
+            padding: 4px 8px;
             border-radius: 4px;
-            padding: 6px;
-            font-size: 12px;
+            font-size: 11px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            white-space: nowrap;
+            z-index: 100;
         }
+        .tool-btn:hover::after { opacity: 1; }
+
+        /* --- SIDEBAR (Right) --- */
+        .sidebar {
+            grid-area: sidebar;
+            background: var(--bg-panel);
+            border-left: 1px solid var(--border);
+            overflow-y: auto;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar-section { border-bottom: 1px solid var(--border); flex-shrink: 0; }
+        .sidebar-header {
+            padding: 12px 15px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+            cursor: pointer;
+            background: var(--bg-panel);
+        }
+        .sidebar-header:hover { color: var(--text-main); }
+        .sidebar-content { padding: 15px; display: flex; flex-direction: column; gap: 12px; background: #1c1c1f; }
+        .hidden { display: none !important; }
+
+        /* Controls */
+        .control-group { display: flex; flex-direction: column; gap: 6px; }
+        .control-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); }
+        
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: var(--bg-surface);
+            border-radius: 2px;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
+        input[type="number"], input[type="text"], input[type="color"] {
+            background: var(--bg-app);
+            border: 1px solid var(--border);
+            color: white;
+            padding: 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            width: 100%;
+        }
+        input[type="color"] { height: 30px; padding: 2px; cursor: pointer; }
+
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .btn {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 8px;
+            border-radius: var(--radius);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .btn:hover { border-color: var(--text-muted); background: #3f3f46; }
+        .btn-primary { background: var(--accent); border-color: var(--accent); color: white; }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-sm { padding: 4px 8px; font-size: 11px; }
+
+        /* --- CANVAS AREA (Center) --- */
+        .canvas-area {
+            grid-area: canvas;
+            background-color: #101012;
+            background-image: radial-gradient(#27272a 1px, transparent 1px);
+            background-size: 20px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        #canvas-wrapper {
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            transition: transform 0.05s linear;
+            position: relative;
+            transform-origin: center;
+        }
+
+        #main-canvas { display: block; image-rendering: auto; }
+        
+        /* Overlay Layers */
+        .overlay-canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
+        .is-drawing .overlay-canvas { pointer-events: auto; cursor: crosshair; }
+        .is-cloning .overlay-canvas { pointer-events: auto; cursor: none; }
+
+        /* Clone Tool Cursor */
+        .clone-cursor {
+            position: absolute;
+            border: 1px solid white;
+            box-shadow: 0 0 2px black;
+            border-radius: 50%;
+            pointer-events: none;
+            display: none;
+            z-index: 100;
+        }
+        .clone-source-indicator {
+            position: absolute;
+            width: 10px; height: 10px;
+            border: 2px solid #00ff00;
+            background: rgba(0,255,0,0.2);
+            border-radius: 50%;
+            pointer-events: none;
+            display: none;
+            z-index: 99;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 2px black;
+        }
+
+        /* Drag Drop Overlay */
+        #drop-zone {
+            position: absolute; inset: 0;
+            background: rgba(99, 102, 241, 0.1);
+            border: 2px dashed var(--accent);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.2s;
+            z-index: 50;
+        }
+        #drop-zone.active { opacity: 1; pointer-events: auto; backdrop-filter: blur(2px); }
+        #drop-zone i { font-size: 48px; color: var(--accent); margin-bottom: 10px; }
+
+        /* --- MODALS --- */
+        .modal-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(2px);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 1000;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.2s;
+        }
+        .modal-backdrop.open { opacity: 1; pointer-events: auto; }
+        .modal {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            width: 300px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        .modal h3 { margin: 0 0 15px 0; font-size: 16px; font-weight: 500; }
+        .modal select, .modal input[type="text"] { margin-bottom: 15px; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
+        /* Loading Spinner */
+        .loader {
+            width: 16px; height: 16px;
+            border: 2px solid var(--text-muted);
+            border-bottom-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            animation: rotation 1s linear infinite;
+            display: none;
+        }
+        @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .is-busy .loader { display: inline-block; }
+
     </style>
 </head>
 <body>
-    <div class="page-wrapper" id="page-wrapper">
-        <header>
-            <h1>Easy Image Editor 2.7</h1>
-            <div class="header-controls">
-                <div class="zoom-control-header">
-                    <label for="zoom-slider">Zoom</label>
-                    <input type="range" id="zoom-slider" min="10" max="300" value="100">
-                    <span class="slider-value">100%</span>
-                </div>
-                <button id="undo-btn" class="btn btn-secondary" disabled>Undo</button>
-                <button id="redo-btn" class="btn btn-secondary" disabled>Redo</button>
-                <p id="current-filename">No file loaded</p>
-                <label for="file-input" class="btn">Load Image</label>
-                <input type="file" id="file-input" accept="image/jpeg, image/png, image/webp, image/tiff, image/bmp, image/gif, application/pdf">
-                <select id="save-format-select">
-                    <option value="png">PNG</option>
-                    <option value="jpg">JPG</option>
-                    <option value="webp">WEBP</option>
-                    <option value="pdf">PDF</option>
-                </select>
-                <button id="save-btn" class="btn btn-secondary">Save Image</button>
-            </div>
-        </header>
-        <main class="main-content">
-            <div class="canvas-wrapper">
-                <div id="image-container">
-                    <canvas id="image-canvas"></canvas>
-                    <canvas id="selection-canvas"></canvas>
-                    <img id="cropper-image" style="display: none; max-width: 100%;">
-                </div>
-            </div>
-            <div class="controls-panel" id="controls-panel">
-                 <div class="control-group">
-                    <h3>Canvas Actions</h3>
-                    <div class="btn-group">
-                        <button data-action="start-crop" class="btn btn-secondary">Crop</button>
-                        <button data-action="apply-crop" class="btn" style="display:none;">Apply Crop</button>
-                        <button data-action="cancel-crop" class="btn btn-secondary" style="display:none;">Cancel</button>
-                    </div>
-                    <div class="btn-group" style="margin-top: 10px;">
-                        <button data-action="rotate-left" class="btn btn-secondary" title="Rotate Left">-90°</button>
-                        <button data-action="rotate-right" class="btn btn-secondary" title="Rotate Right">+90°</button>
-                        <button data-action="flip-h" class="btn btn-secondary" title="Flip Horizontal">H</button>
-                        <button data-action="flip-v" class="btn btn-secondary" title="Flip Vertical">V</button>
-                    </div>
-                    <div class="control-item" style="margin-top: 16px;">
-                        <input type="text" id="custom-rotate-input" placeholder="Enter degrees (e.g., 45)">
-                        <button data-action="rotate-custom" class="btn btn-secondary" style="margin-top: 5px;">Apply Rotation</button>
-                    </div>
-                    <div class="control-item" style="margin-top: 16px;">
-                        <div class="label-container"><label for="resize-slider">Scale</label><span class="slider-value">100%</span></div>
-                        <input type="range" id="resize-slider" min="10" max="100" value="100">
-                        <div class="dimensions-display">(<span id="resize-w">0</span> x <span id="resize-h">0</span> px)</div>
-                    </div>
-                    <button data-action="apply-resize" class="btn btn-secondary">Apply Resize</button>
-                </div>
-                <div class="control-group">
-                    <h3>Selection</h3>
-                    <div class="btn-group">
-                        <button data-action="start-selection" class="btn btn-secondary">Select Area</button>
-                    </div>
-                    <p class="selection-hint">Hold Shift to select multiple areas.</p>
-                    <div id="selection-actions" style="margin-top: 10px; display: none;">
-                        <div class="toggle-switch">
-                            <label for="invert-mask-toggle">Invert Mask</label>
-                            <input type="checkbox" id="invert-mask-toggle">
-                        </div>
-                        <div class="btn-group" style="margin-top: 10px;">
-                           <button data-action="apply-selection" class="btn">Apply Filters to Selection</button>
-                           <button data-action="deselect" class="btn btn-secondary">Deselect</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="control-group">
-                    <h3>Retouch</h3>
-                    <div class="btn-group">
-                        <button data-action="start-clone" class="btn btn-secondary">Clone Brush</button>
-                    </div>
-                    <div id="clone-tool-options" style="display: none;">
-                         <div class="control-item" style="margin-top: 16px;">
-                            <div class="label-container"><label for="brush-size-slider">Brush Size</label><span class="slider-value">20px</span></div>
-                            <input type="range" id="brush-size-slider" min="5" max="500" value="20" data-unit="px">
-                        </div>
-                        <div class="control-item">
-                            <div class="label-container"><label for="brush-smoothness-slider">Brush Smoothness</label><span class="slider-value">50%</span></div>
-                            <input type="range" id="brush-smoothness-slider" min="0" max="100" value="50" data-unit="%">
-                        </div>
-                        <p class="selection-hint">Alt+Click to set source, then paint.</p>
-                    </div>
-                </div>
-                <div class="control-group">
-                    <h3>Drawing Tools</h3>
-                    <div class="btn-group">
-                        <button data-action="add-rectangle" class="btn btn-secondary">Add Rectangle</button>
-                        <button data-action="add-line" class="btn btn-secondary">Add Line</button>
-                        <button data-action="add-arrow" class="btn btn-secondary">Add Arrow</button>
-                    </div>
-                    <div class="control-item" style="margin-top: 16px;">
-                        <div class="label-container"><label for="drawing-color">Line Color</label></div>
-                        <input type="color" id="drawing-color" value="#f2b8b5">
-                    </div>
-                    <div class="control-item">
-                        <div class="label-container"><label for="line-thickness-slider">Line Thickness</label><span class="slider-value">5px</span></div>
-                        <input type="range" id="line-thickness-slider" min="1" max="50" value="5" data-unit="px">
-                    </div>
-                </div>
-                <div class="control-group">
-                    <h3 id="metadata-toggle" class="accordion-toggle">Metadata</h3>
-                    <div id="metadata-content" class="accordion-content">
-                        <!-- EXIF data will be populated here by JS -->
-                    </div>
-                </div>
-                <div class="control-group">
-                    <h3>Filters</h3>
-                    <div class="btn-group">
-                        <button data-filter="grayscale" class="btn btn-secondary">Greyscale</button>
-                        <button data-filter="invert" class="btn btn-secondary">Invert</button>
-                        <button data-action="reset-filters" class="btn btn-secondary">Reset All Adjustments</button>
-                    </div>
-                </div>
-                
-                <div class="control-group">
-                    <h3>Exposure</h3>
-                    <div class="control-item">
-                        <div class="label-container"><label for="exposure-slider">Brightness</label><span class="slider-value">100%</span></div>
-                        <input type="range" data-adjustment="brightness" id="exposure-slider" min="0" max="200" value="100">
-                    </div>
-                    <div class="control-item">
-                        <div class="label-container"><label for="contrast-slider">Contrast</label><span class="slider-value">100%</span></div>
-                        <input type="range" data-adjustment="contrast" id="contrast-slider" min="0" max="200" value="100">
-                    </div>
-                     <div class="control-item">
-                        <div class="label-container"><label for="highlights-slider">Highlights</label><span class="slider-value">0</span></div>
-                        <input type="range" data-adjustment="highlights" id="highlights-slider" min="-100" max="100" value="0" data-unit="">
-                    </div>
-                    <div class="control-item">
-                        <div class="label-container"><label for="shadows-slider">Shadows</label><span class="slider-value">0</span></div>
-                        <input type="range" data-adjustment="shadows" id="shadows-slider" min="-100" max="100" value="0" data-unit="">
-                    </div>
-                    <div class="control-item">
-                        <div class="label-container"><label for="white-point-slider">White Point</label><span class="slider-value">255</span></div>
-                        <input type="range" data-adjustment="white-point" id="white-point-slider" min="128" max="255" value="255" data-unit="">
-                    </div>
-                    <div class="control-item">
-                        <div class="label-container"><label for="black-point-slider">Black Point</label><span class="slider-value">0</span></div>
-                        <input type="range" data-adjustment="black-point" id="black-point-slider" min="0" max="127" value="0" data-unit="">
-                    </div>
-                </div>
 
+    <!-- HEADER -->
+    <header>
+        <div class="app-title">
+            <i class="ph-fill ph-camera"></i>
+            <span>ProEdit 4.0</span>
+            <span class="loader" id="global-loader"></span>
+        </div>
+        <div class="file-info" id="filename-display">Drag & Drop an image</div>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn" id="btn-compare" disabled>Hold to Compare</button>
+            <label class="btn btn-primary" for="file-input">
+                <i class="ph ph-folder-open"></i> Open
+            </label>
+            <button class="btn btn-primary" id="btn-save">
+                <i class="ph ph-download-simple"></i> Save
+            </button>
+        </div>
+        <input type="file" id="file-input" hidden accept="image/*,application/pdf">
+    </header>
+
+    <!-- TOOLBAR -->
+    <aside class="toolbar">
+        <button class="tool-btn active" id="tool-move" title="Move/Zoom (Space)" data-tool="move"><i class="ph ph-hand-grabbing"></i></button>
+        <button class="tool-btn" id="tool-crop" title="Crop (C)" data-tool="crop"><i class="ph ph-crop"></i></button>
+        <div style="height: 1px; background: var(--border); width: 60%;"></div>
+        <button class="tool-btn" id="tool-draw-rect" title="Draw Rectangle" data-tool="rect"><i class="ph ph-rectangle"></i></button>
+        <button class="tool-btn" id="tool-draw-line" title="Draw Line" data-tool="line"><i class="ph ph-line-segment"></i></button>
+        <button class="tool-btn" id="tool-draw-arrow" title="Draw Arrow" data-tool="arrow"><i class="ph ph-arrow-up-right"></i></button>
+        <div style="height: 1px; background: var(--border); width: 60%;"></div>
+        <button class="tool-btn" id="tool-clone" title="Clone Stamp (Alt+Click to Source)" data-tool="clone"><i class="ph ph-stamp"></i></button>
+        <div style="margin-top: auto;"></div>
+        <button class="tool-btn" id="btn-undo" disabled title="Undo (Ctrl+Z)"><i class="ph ph-arrow-u-up-left"></i></button>
+        <button class="tool-btn" id="btn-redo" disabled title="Redo (Ctrl+Y)"><i class="ph ph-arrow-u-up-right"></i></button>
+    </aside>
+
+    <!-- CANVAS -->
+    <main class="canvas-area" id="canvas-area">
+        <div id="drop-zone">
+            <i class="ph ph-upload-simple"></i>
+            <span>Drop image here</span>
+        </div>
+        <div id="canvas-wrapper">
+            <canvas id="main-canvas"></canvas>
+            <canvas id="overlay-canvas" class="overlay-canvas"></canvas>
+            <div id="clone-cursor" class="clone-cursor"></div>
+            <div id="clone-source-indicator" class="clone-source-indicator"></div>
+            <!-- Hidden elements for processing -->
+            <img id="cropper-img" style="display:none; max-width: 100%;">
+        </div>
+    </main>
+
+    <!-- PROPERTIES SIDEBAR -->
+    <aside class="sidebar">
+        
+        <!-- Tool Options (Dynamic) -->
+        <div class="sidebar-section" id="tool-options-panel" style="display:none; border-left: 3px solid var(--accent);">
+             <div class="sidebar-header"><span>Active Tool Options</span></div>
+             <div class="sidebar-content" id="tool-options-content">
+                 <!-- Injected via JS -->
+             </div>
+        </div>
+
+        <!-- Adjustments -->
+        <div class="sidebar-section">
+            <div class="sidebar-header" onclick="toggleSection('adj-content')">
+                <span>Adjustments</span> <i class="ph ph-caret-down"></i>
+            </div>
+            <div id="adj-content" class="sidebar-content">
                 <div class="control-group">
-                    <h3>Color & Effects</h3>
-                     <div class="control-item">
-                        <div class="label-container"><label for="saturation-slider">Saturation</label><span class="slider-value">100%</span></div>
-                        <input type="range" data-adjustment="saturate" id="saturation-slider" min="0" max="200" value="100">
-                    </div>
-                     <div class="control-item">
-                        <div class="label-container"><label for="warmth-slider">Warmth</label><span class="slider-value">0</span></div>
-                        <input type="range" data-adjustment="warmth" id="warmth-slider" min="-100" max="100" value="0" data-unit="">
-                    </div>
-                    <div class="control-item">
-                        <div class="label-container"><label for="sharpness-slider">Sharpness</label><span class="slider-value">0%</span></div>
-                        <input type="range" data-adjustment="sharpness" id="sharpness-slider" min="0" max="100" value="0">
-                    </div>
-                    <div class="control-item">
-                        <div class="label-container"><label for="blur-slider">Blur</label><span class="slider-value">0px</span></div>
-                        <input type="range" data-adjustment="blur" id="blur-slider" min="0" max="100" value="0" data-unit="px">
-                    </div>
-                    <div class="control-item">
-                        <div class="label-container"><label for="pixelate-slider">Pixelate</label><span class="slider-value">0px</span></div>
-                        <input type="range" data-adjustment="pixelate" id="pixelate-slider" min="0" max="100" value="0" data-unit="px">
-                    </div>
-                    <div class="control-item">
-                        <div class="label-container"><label for="vignette-slider">Vignette</label><span class="slider-value">0%</span></div>
-                        <input type="range" data-adjustment="vignette" id="vignette-slider" min="0" max="100" value="0" data-unit="%">
-                    </div>
-                    <div class="control-item">
-                        <div class="label-container"><label for="vignette-radius-slider">Vignette Center</label><span class="slider-value">70%</span></div>
-                        <input type="range" data-adjustment="vignette-radius" id="vignette-radius-slider" min="0" max="100" value="70" data-unit="%">
-                    </div>
+                    <div class="control-label"><span>Brightness</span> <span id="val-brightness">100%</span></div>
+                    <input type="range" data-filter="brightness" min="0" max="200" value="100">
+                </div>
+                <div class="control-group">
+                    <div class="control-label"><span>Contrast</span> <span id="val-contrast">100%</span></div>
+                    <input type="range" data-filter="contrast" min="0" max="200" value="100">
+                </div>
+                <div class="control-group">
+                    <div class="control-label"><span>Saturation</span> <span id="val-saturate">100%</span></div>
+                    <input type="range" data-filter="saturate" min="0" max="200" value="100">
+                </div>
+                <div class="control-group">
+                    <div class="control-label"><span>Highlights</span> <span id="val-highlights">0</span></div>
+                    <input type="range" data-filter="highlights" min="-100" max="100" value="0">
+                </div>
+                <div class="control-group">
+                    <div class="control-label"><span>Shadows</span> <span id="val-shadows">0</span></div>
+                    <input type="range" data-filter="shadows" min="-100" max="100" value="0">
+                </div>
+                <div class="control-group">
+                    <div class="control-label"><span>White Point</span> <span id="val-whitepoint">255</span></div>
+                    <input type="range" data-filter="whitepoint" min="128" max="255" value="255">
+                </div>
+                <div class="control-group">
+                    <div class="control-label"><span>Black Point</span> <span id="val-blackpoint">0</span></div>
+                    <input type="range" data-filter="blackpoint" min="0" max="128" value="0">
+                </div>
+                <div class="control-group">
+                    <div class="control-label"><span>Warmth</span> <span id="val-warmth">0</span></div>
+                    <input type="range" data-filter="warmth" min="-100" max="100" value="0">
+                </div>
+                <div class="btn-grid">
+                    <button class="btn" data-cmd="grayscale">Grayscale</button>
+                    <button class="btn" data-cmd="invert">Invert</button>
                 </div>
             </div>
-        </main>
-        <footer><p>Created by Jonas Lund 2025</p></footer>
-    </div>
+        </div>
 
-    <div class="modal-overlay" id="pdf-page-modal">
-        <div class="modal-dialog">
-            <p id="pdf-page-prompt-text">This PDF has multiple pages. Please enter a page number to load:</p>
-            <input type="number" id="pdf-page-input" min="1">
-            <div class="btn-group">
-                <button id="pdf-page-cancel" class="btn btn-secondary">Cancel</button>
-                <button id="pdf-page-confirm" class="btn">Load Page</button>
+        <!-- Detail & Effects -->
+        <div class="sidebar-section">
+            <div class="sidebar-header" onclick="toggleSection('detail-content')">
+                <span>Detail & Effects</span> <i class="ph ph-caret-down"></i>
+            </div>
+            <div id="detail-content" class="sidebar-content">
+                <div class="control-group">
+                    <div class="control-label"><span>Blur</span> <span id="val-blur">0px</span></div>
+                    <input type="range" data-filter="blur" min="0" max="100" value="0">
+                </div>
+                <div class="control-group">
+                    <div class="control-label"><span>Sharpen</span> <span id="val-sharpen">0</span></div>
+                    <input type="range" data-filter="sharpen" min="0" max="100" value="0">
+                </div>
+                <div class="control-group">
+                    <div class="control-label"><span>Pixelate</span> <span id="val-pixelate">0px</span></div>
+                    <input type="range" data-filter="pixelate" min="0" max="100" value="0">
+                </div>
+                <div class="control-group">
+                    <div class="control-label"><span>Vignette Amount</span> <span id="val-vignette">0%</span></div>
+                    <input type="range" data-filter="vignette" min="0" max="100" value="0">
+                </div>
+                <div class="control-group">
+                    <div class="control-label"><span>Vignette Center</span> <span id="val-vignettecenter">70%</span></div>
+                    <input type="range" data-filter="vignettecenter" min="0" max="100" value="70">
+                </div>
+            </div>
+        </div>
+
+        <!-- Transform & Resize -->
+        <div class="sidebar-section">
+            <div class="sidebar-header" onclick="toggleSection('trans-content')">
+                <span>Transform & Resize</span> <i class="ph ph-caret-down"></i>
+            </div>
+            <div id="trans-content" class="sidebar-content">
+                <div class="btn-grid">
+                    <button class="btn" data-cmd="rotate-l" title="-90 deg"><i class="ph ph-arrow-counter-clockwise"></i> -90°</button>
+                    <button class="btn" data-cmd="rotate-r" title="+90 deg"><i class="ph ph-arrow-clockwise"></i> +90°</button>
+                    <button class="btn" data-cmd="flip-h" title="Flip H"><i class="ph ph-arrows-left-right"></i> Flip H</button>
+                    <button class="btn" data-cmd="flip-v" title="Flip V"><i class="ph ph-arrows-down-up"></i> Flip V</button>
+                </div>
+                <div class="control-group" style="margin-top:5px;">
+                    <div class="control-label"><span>Custom Rotation (deg)</span></div>
+                    <div style="display:flex; gap:5px;">
+                        <input type="number" id="custom-rot-val" value="0">
+                        <button class="btn" onclick="App.UI.applyCustomRotation()">Apply</button>
+                    </div>
+                </div>
+                <hr style="border:0; border-top:1px solid var(--border); width:100%;">
+                <div class="control-group">
+                    <div class="control-label"><span>Resize (px)</span></div>
+                    <div class="btn-grid">
+                        <input type="number" id="resize-w" placeholder="Width">
+                        <input type="number" id="resize-h" placeholder="Height">
+                    </div>
+                    <button class="btn" style="margin-top:5px;" onclick="App.UI.applyResize()">Apply Resize</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Meta -->
+        <div class="sidebar-section" style="border-bottom: none;">
+            <div class="sidebar-header" onclick="toggleSection('meta-content')">
+                <span>Metadata</span> <i class="ph ph-caret-down"></i>
+            </div>
+            <div id="meta-content" class="sidebar-content hidden" style="font-family: monospace; font-size: 11px; color: var(--text-muted); white-space: pre-wrap; overflow-x: hidden;">
+                No Exif data.
+            </div>
+        </div>
+        <div style="padding: 20px;">
+            <button class="btn" style="width: 100%;" data-cmd="reset-all">Reset All Filters</button>
+        </div>
+    </aside>
+
+    <!-- Save Modal -->
+    <div class="modal-backdrop" id="save-modal">
+        <div class="modal">
+            <h3>Save Image</h3>
+            <input type="text" id="save-name" placeholder="filename">
+            <select id="save-format">
+                <option value="image/png">PNG</option>
+                <option value="image/jpeg">JPG (90%)</option>
+                <option value="image/webp">WebP</option>
+                <option value="application/pdf">PDF</option>
+            </select>
+            <div class="modal-actions">
+                <button class="btn" onclick="App.UI.closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="App.IO.executeSave()">Download</button>
             </div>
         </div>
     </div>
 
-    <div class="modal-overlay" id="save-modal">
-        <div class="modal-dialog">
-            <p>Enter a filename:</p>
-            <input type="text" id="save-filename-input">
-            <div class="btn-group">
-                <button id="save-cancel" class="btn btn-secondary">Cancel</button>
-                <button id="save-confirm" class="btn">Save</button>
-            </div>
-        </div>
-    </div>
+<script>
+// --- APP NAMESPACE ---
+const App = {
+    State: {
+        baseImage: null, 
+        currentCanvas: null, // DataURL of committed state
+        filename: "untitled",
+        zoom: 1,
+        pan: { x: 0, y: 0 },
+        activeTool: 'move',
+        isDragging: false,
+        isDrawing: false,
+        lastMouse: { x: 0, y: 0 },
+        drawStart: { x: 0, y: 0 },
+        history: [],
+        historyIndex: -1,
+        filters: {},
+        cropper: null,
+        cloneSource: null,
+        cloneOffset: null, // Added for consistent cloning
+        cloneSnapshot: null, // Added to prevent self-cloning feedback loop in single stroke
+        // Tool Settings
+        toolSettings: {
+            drawColor: '#f2b8b5',
+            drawSize: 5,
+            brushSize: 30,
+            brushHardness: 50,
+            brushOpacity: 100 // Added Opacity
+        }
+    },
 
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js`;
+    // --- INPUT / OUTPUT ---
+    IO: {
+        init() {
+            const dropZone = document.getElementById('drop-zone');
+            document.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('active'); });
+            document.addEventListener('dragleave', e => { if(e.target === dropZone) dropZone.classList.remove('active'); });
+            document.addEventListener('drop', e => {
+                e.preventDefault();
+                dropZone.classList.remove('active');
+                if(e.dataTransfer.files.length) this.loadFile(e.dataTransfer.files[0]);
+            });
+            document.getElementById('file-input').addEventListener('change', e => {
+                if(e.target.files.length) this.loadFile(e.target.files[0]);
+            });
+            document.getElementById('btn-save').addEventListener('click', () => {
+                if(!App.State.baseImage) return;
+                document.getElementById('save-name').value = App.State.filename.replace(/\.[^/.]+$/, "") + "-edit";
+                document.getElementById('save-modal').classList.add('open');
+            });
+        },
 
-            const brushCanvas = document.createElement('canvas');
-            const brushCtx = brushCanvas.getContext('2d', { willReadFrequently: true });
-            
-            const filterCacheCanvas = document.createElement('canvas');
-            const filterCacheCtx = filterCacheCanvas.getContext('2d', { willReadFrequently: true });
-
-            let dom = {
-                pageWrapper: document.getElementById('page-wrapper'),
-                canvas: document.getElementById('image-canvas'),
-                selectionCanvas: document.getElementById('selection-canvas'),
-                cropperImage: document.getElementById('cropper-image'),
-                fileInput: document.getElementById('file-input'),
-                filenameDisplay: document.getElementById('current-filename'),
-                saveBtn: document.getElementById('save-btn'),
-                saveFormatSelect: document.getElementById('save-format-select'),
-                imageContainer: document.getElementById('image-container'),
-                controlsPanel: document.getElementById('controls-panel'),
-                sliders: {
-                    all: document.querySelectorAll('input[type="range"]'),
-                    zoom: document.getElementById('zoom-slider'),
-                    resize: document.getElementById('resize-slider'),
-                    contrast: document.getElementById('contrast-slider'),
-                    saturate: document.getElementById('saturation-slider'),
-                    brightness: document.getElementById('exposure-slider'),
-                    sharpness: document.getElementById('sharpness-slider'),
-                    blur: document.getElementById('blur-slider'),
-                    pixelate: document.getElementById('pixelate-slider'),
-                    warmth: document.getElementById('warmth-slider'),
-                    vignette: document.getElementById('vignette-slider'),
-                    vignetteRadius: document.getElementById('vignette-radius-slider'),
-                    shadows: document.getElementById('shadows-slider'),
-                    highlights: document.getElementById('highlights-slider'),
-                    blackPoint: document.getElementById('black-point-slider'),
-                    whitePoint: document.getElementById('white-point-slider'),
-                    lineThickness: document.getElementById('line-thickness-slider'),
-                    brushSize: document.getElementById('brush-size-slider'),
-                    brushSmoothness: document.getElementById('brush-smoothness-slider')
-                },
-                resizeW: document.getElementById('resize-w'),
-                resizeH: document.getElementById('resize-h'),
-                cropControls: {
-                    start: document.querySelector('[data-action="start-crop"]'),
-                    apply: document.querySelector('[data-action="apply-crop"]'),
-                    cancel: document.querySelector('[data-action="cancel-crop"]')
-                },
-                selectionActions: document.getElementById('selection-actions'),
-                cloneToolOptions: document.getElementById('clone-tool-options'),
-                historyActions: {
-                    undo: document.getElementById('undo-btn'),
-                    redo: document.getElementById('redo-btn')
-                },
-                invertMaskToggle: document.getElementById('invert-mask-toggle'),
-                drawingColorPicker: document.getElementById('drawing-color'),
-                metadata: {
-                    toggle: document.getElementById('metadata-toggle'),
-                    content: document.getElementById('metadata-content')
-                },
-                pdfModal: {
-                    overlay: document.getElementById('pdf-page-modal'),
-                    promptText: document.getElementById('pdf-page-prompt-text'),
-                    input: document.getElementById('pdf-page-input'),
-                    confirmBtn: document.getElementById('pdf-page-confirm'),
-                    cancelBtn: document.getElementById('pdf-page-cancel')
-                },
-                saveModal: {
-                    overlay: document.getElementById('save-modal'),
-                    input: document.getElementById('save-filename-input'),
-                    confirmBtn: document.getElementById('save-confirm'),
-                    cancelBtn: document.getElementById('save-cancel')
-                },
-                customRotateInput: document.getElementById('custom-rotate-input')
-            };
-
-            let state = {
-                isRendering: false,
-                isCropping: false,
-                isSelecting: false,
-                isDrawing: false,
-                isCloning: false,
-                canvasIsDirty: false,
-                drawingTool: null,
-                undoStack: [],
-                redoStack: [],
-                selectionRects: [],
-                currentSelectionRect: null,
-                selectionStartPoint: null,
-                selectionInverted: false,
-                cloneSource: null,
-                clonePaintOffset: null,
-                baseImage: null,
-                currentFilename: 'No file loaded',
-                cropper: null,
-                filterToggles: {
-                    grayscale: false,
-                    invert: false
-                },
-                filterDebounceTimer: null,
-                rafId: null
-            };
-
-            const setUILocked = (isLocked) => {
-                dom.pageWrapper.classList.toggle('ui-locked', isLocked);
-            };
-
-            // --- CORE IMAGE HANDLING ---
-
-            const loadImage = (src, filename, fileObject) => {
-                setUILocked(true);
-                const img = new Image();
-                img.onload = () => {
-                    state.baseImage = img;
-                    dom.canvas.width = img.width;
-                    dom.canvas.height = img.height;
-                    dom.selectionCanvas.width = img.width;
-                    dom.selectionCanvas.height = img.height;
-                    filterCacheCanvas.width = img.width;
-                    filterCacheCanvas.height = img.height;
-                    
-                    if (filename) {
-                        state.currentFilename = filename;
-                        dom.filenameDisplay.textContent = filename;
-                    }
-                    
-                    if (fileObject && fileObject.type === 'image/jpeg') {
-                        EXIF.getData(fileObject, function() {
-                            const allTags = EXIF.getAllTags(this);
-                            populateMetadata(allTags);
-                        });
-                    } else {
-                        populateMetadata(null);
-                    }
-
-                    resetAllControls();
-                    updateAndRender().then(() => setUILocked(false));
-                    state.canvasIsDirty = false;
-                };
-                img.onerror = () => {
-                    alert('Could not load image. Please try another file.');
-                    setUILocked(false);
-                };
-                img.src = src;
-            };
-            
-            const commitCanvasToBaseImage = () => {
-                return new Promise(resolve => {
-                    if (!state.canvasIsDirty || !state.baseImage) {
-                        resolve();
-                        return;
-                    }
-                    const newBaseImage = new Image();
-                    newBaseImage.onload = () => {
-                        state.baseImage = newBaseImage;
-                        state.canvasIsDirty = false;
-                        resolve();
-                    };
-                    newBaseImage.src = dom.canvas.toDataURL();
-                });
-            };
-
-            const applyConvolutionMatrix = (ctx, weights) => {
-                const pixels = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
-                const side = Math.round(Math.sqrt(weights.length));
-                const halfSide = Math.floor(side / 2);
-                const src = pixels.data;
-                const sw = pixels.width;
-                const sh = pixels.height;
-                const w = sw;
-                const h = sh;
-                const output = ctx.createImageData(w, h);
-                const dst = output.data;
-
-                for (let y = 0; y < h; y++) {
-                    for (let x = 0; x < w; x++) {
-                        const sy = y;
-                        const sx = x;
-                        const dstOff = (y * w + x) * 4;
-                        let r = 0, g = 0, b = 0;
-                        for (let cy = 0; cy < side; cy++) {
-                            for (let cx = 0; cx < side; cx++) {
-                                const scy = Math.min(sh - 1, Math.max(0, sy + cy - halfSide));
-                                const scx = Math.min(sw - 1, Math.max(0, sx + cx - halfSide));
-                                const srcOff = (scy * sw + scx) * 4;
-                                const wt = weights[cy * side + cx];
-                                r += src[srcOff] * wt;
-                                g += src[srcOff + 1] * wt;
-                                b += src[srcOff + 2] * wt;
-                            }
-                        }
-                        dst[dstOff] = r;
-                        dst[dstOff + 1] = g;
-                        dst[dstOff + 2] = b;
-                        dst[dstOff + 3] = src[dstOff + 3];
-                    }
-                }
-                ctx.putImageData(output, 0, 0);
-            };
-
-            const applyPixelate = (ctx, size) => {
-                if (size <= 0) return;
-                const w = ctx.canvas.width;
-                const h = ctx.canvas.height;
-                for (let y = 0; y < h; y += size) {
-                    for (let x = 0; x < w; x += size) {
-                        const pixel = ctx.getImageData(x, y, 1, 1).data;
-                        ctx.fillStyle = `rgba(${pixel[0]},${pixel[1]},${pixel[2]},${pixel[3]/255})`;
-                        ctx.fillRect(x, y, size, size);
-                    }
+        loadFile(file) {
+            App.UI.setBusy(true);
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                if (file.type === 'application/pdf') this.loadPDF(e.target.result);
+                else {
+                    this.loadImageSrc(e.target.result, file.name);
+                    if(file.type === 'image/jpeg') this.readEXIF(file);
                 }
             };
+            if(file.type === 'application/pdf') reader.readAsArrayBuffer(file);
+            else reader.readAsDataURL(file);
+        },
 
-            const applyWarmth = (ctx, value) => {
-                if (value === 0) return;
-                const amount = Math.abs(value) / 100;
-                const color = value > 0 ? `rgba(255, 165, 0, ${amount * 0.2})` : `rgba(0, 0, 255, ${amount * 0.2})`;
-                ctx.globalCompositeOperation = 'overlay';
-                ctx.fillStyle = color;
-                ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-                ctx.globalCompositeOperation = 'source-over';
-            };
-
-            const applyVignette = (ctx, amountPercent, radiusPercent) => {
-                if (amountPercent <= 0) return;
-                const w = ctx.canvas.width;
-                const h = ctx.canvas.height;
-                const outerRadius = Math.sqrt(w*w + h*h) / 2;
-                const innerRadius = outerRadius * (radiusPercent / 100);
+        loadImageSrc(src, name) {
+            const img = new Image();
+            img.onload = () => {
+                App.State.baseImage = img;
+                App.State.filename = name;
                 
-                const gradient = ctx.createRadialGradient(w/2, h/2, innerRadius, w/2, h/2, outerRadius);
-                gradient.addColorStop(0, 'rgba(0,0,0,0)');
-                gradient.addColorStop(1, `rgba(0,0,0,${0.8 * (amountPercent/100)})`);
+                const canvas = document.getElementById('main-canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
                 
-                ctx.fillStyle = gradient;
-                ctx.fillRect(0, 0, w, h);
+                // Overlay init
+                const overlay = document.getElementById('overlay-canvas');
+                overlay.width = img.width;
+                overlay.height = img.height;
+
+                App.State.currentCanvas = canvas.toDataURL();
+                App.State.history = [App.State.currentCanvas];
+                App.State.historyIndex = 0;
+                App.State.zoom = Math.min( (window.innerWidth-400)/img.width, (window.innerHeight-100)/img.height, 1); // Auto fit
+                App.State.pan = {x:0, y:0};
+                App.State.filters = this.getResetFilters();
+
+                document.getElementById('resize-w').value = img.width;
+                document.getElementById('resize-h').value = img.height;
+
+                App.UI.updateTransform();
+                App.UI.resetControls();
+                App.UI.updateFilename(name);
+                App.UI.toggleHistoryBtns();
+                App.UI.setBusy(false);
+                document.getElementById('btn-compare').disabled = false;
             };
+            img.src = src;
+        },
 
-            const applyLevels = (ctx, shadows, highlights, blackPoint, whitePoint) => {
-                const imageData = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
-                const data = imageData.data;
-                const shadowAmount = shadows / 100;
-                const highlightAmount = highlights / 100;
+        async loadPDF(data) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+            const pdf = await pdfjsLib.getDocument(data).promise;
+            const page = await pdf.getPage(1);
+            const viewport = page.getViewport({ scale: 2.0 });
+            const cvs = document.createElement('canvas');
+            cvs.width = viewport.width; cvs.height = viewport.height;
+            await page.render({ canvasContext: cvs.getContext('2d'), viewport }).promise;
+            this.loadImageSrc(cvs.toDataURL(), "document.pdf");
+        },
 
-                for (let i = 0; i < data.length; i += 4) {
-                    let r = data[i], g = data[i+1], b = data[i+2];
-
-                    const range = whitePoint - blackPoint;
-                    if (range > 0) {
-                        r = Math.max(0, Math.min(255, ((r - blackPoint) / range) * 255));
-                        g = Math.max(0, Math.min(255, ((g - blackPoint) / range) * 255));
-                        b = Math.max(0, Math.min(255, ((b - blackPoint) / range) * 255));
+        readEXIF(file) {
+            EXIF.getData(file, function() {
+                const allTags = EXIF.getAllTags(this);
+                const metaDiv = document.getElementById('meta-content');
+                metaDiv.innerHTML = '';
+                if(!allTags || Object.keys(allTags).length === 0) {
+                    metaDiv.innerHTML = "No Exif data found."; return;
+                }
+                for(let key in allTags) {
+                    if(typeof allTags[key] === 'string' || typeof allTags[key] === 'number') {
+                        metaDiv.innerHTML += `<div><b>${key}:</b> ${allTags[key]}</div>`;
                     }
+                }
+            });
+        },
 
-                    const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-                    if (shadowAmount !== 0 && luminance < 128) {
-                        const factor = 1 + shadowAmount * (1 - luminance / 128);
+        executeSave() {
+            const name = document.getElementById('save-name').value;
+            const format = document.getElementById('save-format').value;
+            const canvas = document.getElementById('main-canvas');
+            
+            if (format === 'application/pdf') {
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({ orientation: canvas.width > canvas.height ? 'l' : 'p', unit: 'px', format: [canvas.width, canvas.height] });
+                pdf.addImage(canvas.toDataURL('image/jpeg'), 'JPEG', 0, 0, canvas.width, canvas.height);
+                pdf.save(name + ".pdf");
+            } else {
+                const link = document.createElement('a');
+                link.download = name + (format === 'image/png' ? '.png' : format === 'image/webp' ? '.webp' : '.jpg');
+                link.href = canvas.toDataURL(format, 0.9);
+                link.click();
+            }
+            App.UI.closeModal();
+        },
+        
+        getResetFilters() {
+            return { 
+                brightness: 100, contrast: 100, saturate: 100, warmth: 0, 
+                blur: 0, sharpen: 0, vignette: 0, vignettecenter: 70, pixelate: 0,
+                highlights: 0, shadows: 0, whitepoint: 255, blackpoint: 0 
+            };
+        }
+    },
+
+    // --- FILTERS (Processing) ---
+    Filters: {
+        async render() {
+            if(!App.State.baseImage) return;
+            
+            const canvas = document.getElementById('main-canvas');
+            const ctx = canvas.getContext('2d');
+            
+            const tempImg = new Image();
+            tempImg.src = App.State.currentCanvas;
+            await new Promise(r => tempImg.onload = r);
+            
+            ctx.clearRect(0,0, canvas.width, canvas.height);
+            
+            // 1. CSS-like Filters (Fast)
+            const f = App.State.filters;
+            let filterString = `brightness(${f.brightness}%) contrast(${f.contrast}%) saturate(${f.saturate}%)`;
+            if(f.grayscale) filterString += ` grayscale(100%)`;
+            if(f.invert) filterString += ` invert(100%)`;
+            
+            ctx.filter = filterString;
+            ctx.drawImage(tempImg, 0, 0);
+            ctx.filter = 'none';
+
+            // 2. Pixel Manipulation (Heavy)
+            if (f.warmth !== 0 || f.vignette > 0 || f.sharpen > 0 || f.pixelate > 0 || 
+                f.highlights !== 0 || f.shadows !== 0 || f.blackpoint !== 0 || f.whitepoint !== 255 || f.blur > 0) {
+                
+                const iD = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                this.processPixels(iD, f);
+                ctx.putImageData(iD, 0, 0);
+                
+                if(f.pixelate > 0) this.applyPixelate(ctx, canvas.width, canvas.height, f.pixelate);
+                
+                if(f.blur > 0) {
+                    const tempC = document.createElement('canvas');
+                    tempC.width = canvas.width; tempC.height = canvas.height;
+                    tempC.getContext('2d').putImageData(iD, 0,0);
+                    
+                    ctx.filter = `blur(${f.blur}px)`;
+                    ctx.clearRect(0,0,canvas.width, canvas.height);
+                    ctx.drawImage(tempC, 0, 0);
+                    ctx.filter = 'none';
+                }
+            }
+        },
+
+        processPixels(imgData, f) {
+            const d = imgData.data;
+            const w = imgData.width;
+            const h = imgData.height;
+            
+            const cx = w/2, cy = h/2;
+            const maxDist = Math.sqrt(cx*cx + cy*cy);
+            const vigStrength = f.vignette / 100;
+            const vigCenter = f.vignettecenter / 100;
+
+            const range = f.whitepoint - f.blackpoint;
+            const shadowF = f.shadows / 100;
+            const highlightF = f.highlights / 100;
+
+            const doSharpen = f.sharpen > 0;
+            const sharpMix = f.sharpen / 100;
+            let copyData = null;
+            if(doSharpen) copyData = new Uint8ClampedArray(d);
+
+            for (let i = 0; i < d.length; i += 4) {
+                let r = d[i];
+                let g = d[i+1];
+                let b = d[i+2];
+
+                if (range !== 255) {
+                    r = (r - f.blackpoint) * (255 / range);
+                    g = (g - f.blackpoint) * (255 / range);
+                    b = (b - f.blackpoint) * (255 / range);
+                }
+
+                const lum = 0.299*r + 0.587*g + 0.114*b;
+                if (f.shadows !== 0 && lum < 128) {
+                    const boost = (128 - lum) / 128 * shadowF * 50;
+                    r += boost; g += boost; b += boost;
+                }
+                if (f.highlights !== 0 && lum > 128) {
+                    const damp = (lum - 128) / 128 * highlightF * 50;
+                    r += damp; g += damp; b += damp;
+                }
+
+                if (f.warmth !== 0) {
+                    r *= (f.warmth > 0) ? 1 + f.warmth/200 : 1;
+                    b *= (f.warmth < 0) ? 1 + Math.abs(f.warmth)/200 : 1;
+                }
+
+                if (f.vignette > 0) {
+                    const x = (i / 4) % w;
+                    const y = Math.floor((i / 4) / w);
+                    const dist = Math.sqrt((x-cx)*(x-cx) + (y-cy)*(y-cy));
+                    const radius = maxDist * vigCenter;
+                    if(dist > radius) {
+                        const diff = (dist - radius) / (maxDist - radius);
+                        const factor = 1 - (diff * vigStrength);
                         r *= factor; g *= factor; b *= factor;
                     }
-                    if (highlightAmount !== 0 && luminance >= 128) {
-                        const factor = 1 - highlightAmount * ((luminance - 128) / 127);
-                        r = r + (255 - r) * (1 - factor);
-                        g = g + (255 - g) * (1 - factor);
-                        b = b + (255 - b) * (1 - factor);
-                    }
-
-                    data[i] = Math.max(0, Math.min(255, r));
-                    data[i+1] = Math.max(0, Math.min(255, g));
-                    data[i+2] = Math.max(0, Math.min(255, b));
                 }
-                ctx.putImageData(imageData, 0, 0);
-            };
+
+                if (doSharpen && i > 4) {
+                    r += (r - copyData[i-4]) * sharpMix;
+                    g += (g - copyData[i-3]) * sharpMix;
+                    b += (b - copyData[i-2]) * sharpMix;
+                }
+
+                d[i] = Math.min(255, Math.max(0, r));
+                d[i+1] = Math.min(255, Math.max(0, g));
+                d[i+2] = Math.min(255, Math.max(0, b));
+            }
+        },
+
+        applyPixelate(ctx, w, h, amount) {
+            if(amount < 1) return;
+            const size = amount / 100; 
+            const wScaled = Math.max(1, Math.floor(w * (1 - size*0.95)));
+            const hScaled = Math.max(1, Math.floor(h * (1 - size*0.95)));
             
-            const updateFilterCache = () => {
-                if (!state.baseImage) return;
-                
-                filterCacheCtx.clearRect(0, 0, filterCacheCanvas.width, filterCacheCanvas.height);
-                filterCacheCtx.drawImage(state.baseImage, 0, 0);
+            ctx.drawImage(ctx.canvas, 0, 0, w, h, 0, 0, wScaled, hScaled);
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(ctx.canvas, 0, 0, wScaled, hScaled, 0, 0, w, h);
+            ctx.imageSmoothingEnabled = true;
+        }
+    },
 
-                let filterStrings = [];
-                dom.sliders.all.forEach(slider => {
-                    if (slider.dataset.adjustment && !['sharpness', 'pixelate', 'warmth', 'vignette', 'vignette-radius', 'shadows', 'highlights', 'black-point', 'white-point'].includes(slider.dataset.adjustment)) {
-                        const adj = slider.dataset.adjustment;
-                        const val = slider.value;
-                        const unit = slider.dataset.unit || '%';
-                        filterStrings.push(`${adj}(${val}${unit})`);
-                    }
-                });
-                
-                if (state.filterToggles.grayscale) filterStrings.push('grayscale(100%)');
-                if (state.filterToggles.invert) filterStrings.push('invert(100%)');
-                
-                filterCacheCtx.filter = filterStrings.join(' ');
-                filterCacheCtx.drawImage(state.baseImage, 0, 0);
-                filterCacheCtx.filter = 'none';
-
-                const sharpenValue = parseInt(dom.sliders.sharpness.value, 10);
-                if (sharpenValue > 0) {
-                    const amount = sharpenValue / 100;
-                    const sharpenKernel = [0, -amount, 0, -amount, 1 + 4 * amount, -amount, 0, -amount, 0];
-                    applyConvolutionMatrix(filterCacheCtx, sharpenKernel);
-                }
-
-                const pixelateValue = parseInt(dom.sliders.pixelate.value, 10);
-                if (pixelateValue > 0) {
-                    applyPixelate(filterCacheCtx, pixelateValue);
-                }
-
-                const warmthValue = parseInt(dom.sliders.warmth.value, 10);
-                applyWarmth(filterCacheCtx, warmthValue);
-                
-                const shadows = parseInt(dom.sliders.shadows.value, 10);
-                const highlights = parseInt(dom.sliders.highlights.value, 10);
-                const blackPoint = parseInt(dom.sliders.blackPoint.value, 10);
-                const whitePoint = parseInt(dom.sliders.whitePoint.value, 10);
-                applyLevels(filterCacheCtx, shadows, highlights, blackPoint, whitePoint);
-
-                const vignetteAmount = parseInt(dom.sliders.vignette.value, 10);
-                const vignetteRadius = parseInt(dom.sliders.vignetteRadius.value, 10);
-                applyVignette(filterCacheCtx, vignetteAmount, vignetteRadius);
-            };
-
-            const redrawFromCache = () => {
-                if (!state.baseImage) return;
-                const mainCtx = dom.canvas.getContext('2d');
-                mainCtx.clearRect(0, 0, dom.canvas.width, dom.canvas.height);
-
-                if (state.selectionRects.length === 0) {
-                    mainCtx.drawImage(filterCacheCanvas, 0, 0);
-                } else {
-                    mainCtx.drawImage(state.baseImage, 0, 0);
-                    mainCtx.save();
-                    mainCtx.beginPath();
-                    if (state.selectionInverted) {
-                        mainCtx.rect(0, 0, dom.canvas.width, dom.canvas.height);
-                        state.selectionRects.forEach(rect => {
-                            mainCtx.rect(rect.x, rect.y, rect.w, rect.h);
-                        });
-                        mainCtx.clip("evenodd");
-                    } else {
-                        state.selectionRects.forEach(rect => {
-                            mainCtx.rect(rect.x, rect.y, rect.w, rect.h);
-                        });
-                        mainCtx.clip();
-                    }
-                    mainCtx.drawImage(filterCacheCanvas, 0, 0);
-                    mainCtx.restore();
-                }
-            };
-
-            const updateAndRender = async () => {
-                setUILocked(true);
-                await commitCanvasToBaseImage();
-                updateFilterCache();
-                redrawFromCache();
-                setUILocked(false);
-            };
-
-            // --- DESTRUCTIVE ACTIONS (Crop, Rotate, Resize) ---
-
-            const startCrop = async () => {
-                if (!state.baseImage || state.isCropping) return;
-                await commitCanvasToBaseImage();
-                state.isCropping = true;
-                
-                dom.canvas.style.display = 'none';
-                dom.cropperImage.src = dom.canvas.toDataURL();
-                dom.cropperImage.style.display = 'block';
-                
-                state.cropper = new Cropper(dom.cropperImage, { viewMode: 1, background: false, autoCropArea: 1 });
-                
-                dom.cropControls.start.style.display = 'none';
-                dom.cropControls.apply.style.display = 'inline-block';
-                dom.cropControls.cancel.style.display = 'inline-block';
-            };
-
-            const endCrop = (applyChange = false) => {
-                if (!state.isCropping) return;
-                
-                if (applyChange) {
-                    pushStateToHistory();
-                    const croppedCanvas = state.cropper.getCroppedCanvas();
-                    loadImage(croppedCanvas.toDataURL());
-                }
-                
-                state.cropper.destroy();
-                state.cropper = null;
-                dom.cropperImage.style.display = 'none';
-                dom.canvas.style.display = 'block';
-
-                dom.cropControls.start.style.display = 'inline-block';
-                dom.cropControls.apply.style.display = 'none';
-                dom.cropControls.cancel.style.display = 'none';
-                state.isCropping = false;
-            };
+    // --- TOOLS & INTERACTION ---
+    Tools: {
+        init() {
+            const area = document.getElementById('canvas-area');
             
-            const applyTransform = async (action, value = 0) => {
-                if (!state.baseImage) return;
-                await commitCanvasToBaseImage();
-                pushStateToHistory();
-                
-                const tempCanvas = document.createElement('canvas');
-                const tempCtx = tempCanvas.getContext('2d');
-                let w = dom.canvas.width, h = dom.canvas.height;
-
-                if (action === 'rotate-left' || action === 'rotate-right' || action === 'rotate-custom') {
-                    const angle = (action === 'rotate-custom' ? value : (action === 'rotate-left' ? -90 : 90)) * Math.PI / 180;
-                    const sin = Math.abs(Math.sin(angle));
-                    const cos = Math.abs(Math.cos(angle));
-                    w = dom.canvas.width * cos + dom.canvas.height * sin;
-                    h = dom.canvas.width * sin + dom.canvas.height * cos;
-                }
-                
-                tempCanvas.width = w;
-                tempCanvas.height = h;
-                
-                tempCtx.translate(w / 2, h / 2);
-                switch(action) {
-                    case 'rotate-left': tempCtx.rotate(-90 * Math.PI / 180); break;
-                    case 'rotate-right': tempCtx.rotate(90 * Math.PI / 180); break;
-                    case 'rotate-custom': tempCtx.rotate(value * Math.PI / 180); break;
-                    case 'flip-h': tempCtx.scale(-1, 1); break;
-                    case 'flip-v': tempCtx.scale(1, -1); break;
-                }
-                tempCtx.drawImage(dom.canvas, -dom.canvas.width / 2, -dom.canvas.height / 2);
-                
-                loadImage(tempCanvas.toDataURL());
-            };
-
-            const applyResize = async () => {
-                if (!state.baseImage) return;
-                await commitCanvasToBaseImage();
-                pushStateToHistory();
-                
-                const scale = parseInt(dom.sliders.resize.value, 10) / 100;
-                const sourceCanvas = dom.canvas;
-                const newWidth = Math.round(sourceCanvas.width * scale);
-                const newHeight = Math.round(sourceCanvas.height * scale);
-
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = newWidth;
-                tempCanvas.height = newHeight;
-                
-                tempCanvas.getContext('2d').drawImage(sourceCanvas, 0, 0, newWidth, newHeight);
-                
-                loadImage(tempCanvas.toDataURL());
-            };
-
-            // --- UI AND EVENT HANDLERS ---
-
-            const onFilterChange = () => {
-                clearTimeout(state.filterDebounceTimer);
-                state.filterDebounceTimer = setTimeout(updateAndRender, 50);
-            };
-
-            const updateSliderValue = (slider) => {
-                const valueDisplay = slider.parentElement.querySelector('.slider-value');
-                if (valueDisplay) {
-                    const unit = slider.dataset.unit || '%';
-                    valueDisplay.textContent = slider.value + unit;
-                }
-            };
-
-            const resetFilterControls = () => {
-                dom.sliders.contrast.value = 100;
-                dom.sliders.saturate.value = 100;
-                dom.sliders.brightness.value = 100;
-                dom.sliders.sharpness.value = 0;
-                dom.sliders.blur.value = 0;
-                dom.sliders.pixelate.value = 0;
-                dom.sliders.warmth.value = 0;
-                dom.sliders.vignette.value = 0;
-                dom.sliders.vignetteRadius.value = 70;
-                dom.sliders.shadows.value = 0;
-                dom.sliders.highlights.value = 0;
-                dom.sliders.blackPoint.value = 0;
-                dom.sliders.whitePoint.value = 255;
-                
-                document.querySelectorAll('.controls-panel input[type="range"]').forEach(updateSliderValue);
-
-                Object.keys(state.filterToggles).forEach(key => {
-                    state.filterToggles[key] = false;
-                    const btn = document.querySelector(`[data-filter="${key}"]`);
-                    if (btn) btn.classList.remove('active');
-                });
-            };
+            area.addEventListener('mousedown', e => this.handleDown(e));
+            window.addEventListener('mousemove', e => this.handleMove(e));
+            window.addEventListener('mouseup', e => this.handleUp(e));
             
-            const resetAllControls = () => {
-                dom.sliders.zoom.value = 100;
-                dom.sliders.resize.value = 100;
-                updateSliderValue(dom.sliders.zoom);
-                updateSliderValue(dom.sliders.resize);
-                
-                resetFilterControls();
-                
-                updateZoom();
-                updateResizeDisplay();
-            };
-
-            const updateZoom = () => {
-                const scale = dom.sliders.zoom.value / 100;
-                dom.imageContainer.style.transform = `scale(${scale})`;
-            };
-
-            const updateResizeDisplay = () => {
-                if (!state.baseImage) {
-                    dom.resizeW.textContent = 0;
-                    dom.resizeH.textContent = 0;
-                    return;
-                }
-                const scale = parseInt(dom.sliders.resize.value, 10) / 100;
-                dom.resizeW.textContent = Math.round(state.baseImage.width * scale);
-                dom.resizeH.textContent = Math.round(state.baseImage.height * scale);
-            };
-
-            const showPagePrompt = (maxPage, callback) => {
-                dom.pdfModal.promptText.textContent = `This PDF has ${maxPage} pages. Please enter a page number to load (1 - ${maxPage}):`;
-                dom.pdfModal.input.max = maxPage;
-                dom.pdfModal.input.value = 1;
-                dom.pdfModal.overlay.classList.add('visible');
-
-                const confirmHandler = () => {
-                    const pageNum = parseInt(dom.pdfModal.input.value, 10);
-                    if (pageNum >= 1 && pageNum <= maxPage) {
-                        callback(pageNum);
-                        hidePagePrompt();
-                    } else {
-                        alert(`Please enter a valid page number between 1 and ${maxPage}.`);
-                    }
-                };
-
-                const cancelHandler = () => {
-                    hidePagePrompt();
-                };
-
-                const hidePagePrompt = () => {
-                    dom.pdfModal.overlay.classList.remove('visible');
-                    dom.pdfModal.confirmBtn.removeEventListener('click', confirmHandler);
-                    dom.pdfModal.cancelBtn.removeEventListener('click', cancelHandler);
-                };
-
-                dom.pdfModal.confirmBtn.addEventListener('click', confirmHandler);
-                dom.pdfModal.cancelBtn.addEventListener('click', cancelHandler);
-            };
-            
-            const deactivateAllTools = async () => {
-                await commitCanvasToBaseImage();
-                state.isSelecting = false;
-                state.isDrawing = false;
-                state.isCloning = false;
-                dom.imageContainer.classList.remove('is-selecting', 'is-cloning', 'source-set');
-                dom.cloneToolOptions.style.display = 'none';
-                if (state.isCropping) endCrop(false);
-            };
-
-            const populateMetadata = (tags) => {
-                const content = dom.metadata.content;
-                content.innerHTML = '';
-                if (!tags || Object.keys(tags).length === 0) {
-                    content.innerHTML = '<p class="selection-hint">No metadata found.</p>';
-                    return;
-                }
-
-                for (const tagName in tags) {
-                    if (Object.hasOwnProperty.call(tags, tagName)) {
-                        const value = tags[tagName];
-                        if (typeof value === 'object' || tagName === 'thumbnail') continue;
-
-                        const row = document.createElement('div');
-                        row.className = 'metadata-row';
-
-                        const label = document.createElement('label');
-                        label.textContent = tagName;
-                        
-                        const input = document.createElement('input');
-                        input.type = 'text';
-                        input.value = value;
-                        
-                        row.appendChild(label);
-                        row.appendChild(input);
-                        content.appendChild(row);
-                    }
-                }
-            };
-
-            // --- Bind Event Listeners ---
-
-            dom.fileInput.addEventListener('change', (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-
-                if (file.type === 'application/pdf') {
-                    const reader = new FileReader();
-                    reader.onload = async (event) => {
-                        try {
-                            const pdfData = new Uint8Array(event.target.result);
-                            const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
-                            
-                            const loadPage = async (pageNum) => {
-                                const page = await pdf.getPage(pageNum);
-                                const viewport = page.getViewport({ scale: 1.5 });
-
-                                const tempCanvas = document.createElement('canvas');
-                                const tempCtx = tempCanvas.getContext('2d');
-                                tempCanvas.height = viewport.height;
-                                tempCanvas.width = viewport.width;
-
-                                await page.render({ canvasContext: tempCtx, viewport: viewport }).promise;
-                                loadImage(tempCanvas.toDataURL(), file.name);
-                            };
-
-                            if (pdf.numPages > 1) {
-                                showPagePrompt(pdf.numPages, loadPage);
-                            } else {
-                                loadPage(1);
-                            }
-                        } catch (err) {
-                            console.error(err);
-                            alert('Could not load the PDF file. It may be corrupt or password-protected.');
-                        }
-                    };
-                    reader.readAsArrayBuffer(file);
-                } else if (file.type === 'image/tiff') {
-                    const reader = new FileReader();
-                    reader.onload = function(event) {
-                        try {
-                            const buffer = event.target.result;
-                            const ifds = UTIF.decode(buffer);
-                            if (!ifds || ifds.length === 0) throw new Error("Invalid TIFF data.");
-                            const firstPage = ifds[0];
-                            UTIF.decodeImage(buffer, firstPage);
-                            const rgba = UTIF.toRGBA8(firstPage);
-
-                            const tempCanvas = document.createElement('canvas');
-                            const tempCtx = tempCanvas.getContext('2d');
-                            tempCanvas.width = firstPage.width;
-                            tempCanvas.height = firstPage.height;
-
-                            const imageData = tempCtx.createImageData(firstPage.width, firstPage.height);
-                            imageData.data.set(new Uint8ClampedArray(rgba));
-                            tempCtx.putImageData(imageData, 0, 0);
-
-                            loadImage(tempCanvas.toDataURL(), file.name, file);
-                        } catch (err) {
-                            console.error(err);
-                            alert('Could not load the TIFF file. It may be corrupt or in an unsupported format.');
-                        }
-                    };
-                    reader.readAsArrayBuffer(file);
-                } else if (file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onload = (re) => loadImage(re.target.result, file.name, file);
-                    reader.readAsDataURL(file);
-                } else {
-                    alert('Please select a valid image file (JPG, PNG, WEBP, TIFF, BMP, GIF, PDF).');
-                }
-                e.target.value = null;
-            });
-
-            dom.saveBtn.addEventListener('click', async () => {
-                if (!state.baseImage) return;
-                await commitCanvasToBaseImage();
-
-                const baseName = state.currentFilename.split('.')[0];
-                dom.saveModal.input.value = `edited-${baseName}`;
-                dom.saveModal.overlay.classList.add('visible');
-            });
-
-            dom.saveModal.cancelBtn.addEventListener('click', () => {
-                dom.saveModal.overlay.classList.remove('visible');
-            });
-
-            dom.saveModal.confirmBtn.addEventListener('click', () => {
-                const filename = dom.saveModal.input.value;
-                if (!filename) {
-                    alert("Please enter a filename.");
-                    return;
-                }
-
-                const format = dom.saveFormatSelect.value;
-                const mimeType = format === 'jpg' ? 'image/jpeg' : `image/${format}`;
-                
-                if (format === 'pdf') {
-                    const { jsPDF } = window.jspdf;
-                    const imgData = dom.canvas.toDataURL('image/jpeg', 0.92);
-                    const pdf = new jsPDF({
-                        orientation: dom.canvas.width > dom.canvas.height ? 'landscape' : 'portrait',
-                        unit: 'px',
-                        format: [dom.canvas.width, dom.canvas.height]
-                    });
-                    pdf.addImage(imgData, 'JPEG', 0, 0, dom.canvas.width, dom.canvas.height);
-                    pdf.save(`${filename}.pdf`);
-                } else {
-                    const dataURL = dom.canvas.toDataURL(mimeType, 0.92);
-                    const link = document.createElement('a');
-                    link.download = `${filename}.${format}`;
-                    link.href = dataURL;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                }
-                
-                dom.saveModal.overlay.classList.remove('visible');
-            });
-
-            dom.controlsPanel.addEventListener('click', async (e) => {
-                if (e.target.tagName !== 'BUTTON') return;
-                const action = e.target.dataset.action;
-                const filter = e.target.dataset.filter;
-
-                if (action) {
-                    if (action !== 'apply-crop' && action !== 'cancel-crop' && action !== 'apply-resize' && action !== 'apply-selection' && action !== 'deselect' && action !== 'undo' ) {
-                         await deactivateAllTools();
-                    }
-
-                    switch (action) {
-                        case 'start-crop': startCrop(); break;
-                        case 'apply-crop': endCrop(true); break;
-                        case 'cancel-crop': endCrop(false); break;
-                        case 'apply-resize': applyResize(); break;
-                        case 'reset-filters': 
-                            if (state.baseImage) {
-                                resetFilterControls();
-                                onFilterChange();
-                            }
-                            break;
-                        case 'rotate-left':
-                        case 'rotate-right':
-                        case 'flip-h':
-                        case 'flip-v':
-                            applyTransform(action);
-                            break;
-                        case 'rotate-custom':
-                            const value = parseFloat(dom.customRotateInput.value);
-                            if (!isNaN(value)) {
-                                applyTransform('rotate-custom', value);
-                            }
-                            break;
-                        case 'start-selection':
-                            state.isSelecting = true;
-                            dom.imageContainer.classList.add('is-selecting');
-                            break;
-                        case 'deselect':
-                            deselectArea();
-                            break;
-                        case 'apply-selection':
-                            applySelection();
-                            break;
-                        case 'start-clone':
-                            state.isCloning = true;
-                            dom.imageContainer.classList.add('is-cloning');
-                            dom.cloneToolOptions.style.display = 'block';
-                            break;
-                        case 'add-rectangle':
-                        case 'add-line':
-                        case 'add-arrow':
-                            state.isDrawing = true;
-                            state.drawingTool = action;
-                            dom.imageContainer.classList.add('is-selecting');
-                            break;
-                        case 'undo':
-                            undoLastAction();
-                            break;
-                    }
-                }
-
-                if (filter) {
-                    state.filterToggles[filter] = !state.filterToggles[filter];
-                    e.target.classList.toggle('active', state.filterToggles[filter]);
-                    onFilterChange();
-                }
-            });
-
-            dom.sliders.all.forEach(slider => {
-                updateSliderValue(slider);
-                slider.addEventListener('input', () => {
-                    updateSliderValue(slider);
-                    if (slider === dom.sliders.zoom) updateZoom();
-                    if (slider === dom.sliders.resize) updateResizeDisplay();
-                    if (slider.dataset.adjustment) onFilterChange();
-                });
-            });
-
-            const selectionCtx = dom.selectionCanvas.getContext('2d', { willReadFrequently: true });
-            let isPainting = false;
-
-            const getMousePos = (e) => {
-                const rect = dom.canvas.getBoundingClientRect();
-                const scaleX = dom.canvas.width / rect.width;
-                const scaleY = dom.canvas.height / rect.height;
-                return {
-                    x: (e.clientX - rect.left) * scaleX,
-                    y: (e.clientY - rect.top) * scaleY
-                };
-            };
-            
-            const deselectArea = () => {
-                state.isSelecting = false;
-                state.selectionRects = [];
-                state.currentSelectionRect = null;
-                dom.imageContainer.classList.remove('is-selecting');
-                selectionCtx.clearRect(0, 0, dom.selectionCanvas.width, dom.selectionCanvas.height);
-                dom.selectionActions.style.display = 'none';
-                dom.invertMaskToggle.checked = false;
-                state.selectionInverted = false;
-                redrawFromCache();
-            };
-
-            const applySelection = async () => {
-                if (state.selectionRects.length === 0) return;
-                
-                pushStateToHistory(); // ✨ FIX: Save state before applying selection
-                const newBaseImage = new Image();
-                newBaseImage.onload = () => {
-                    state.baseImage = newBaseImage;
-                    deselectArea();
-                    updateAndRender();
-                }
-                newBaseImage.src = dom.canvas.toDataURL();
-            };
-            
-            const undoLastAction = () => {
-                if (state.undoStack.length > 0) {
-                    state.redoStack.push(state.baseImage);
-                    const lastImage = state.undoStack.pop();
-                    // ✨ FIX: Call loadImage to handle canvas resizing correctly
-                    loadImage(lastImage.src); 
-                    updateUndoRedoButtons();
-                }
-            };
-
-            const redoLastAction = () => {
-                if (state.redoStack.length > 0) {
-                    state.undoStack.push(state.baseImage);
-                    const nextImage = state.redoStack.pop();
-                    // ✨ FIX: Call loadImage to handle canvas resizing correctly
-                    loadImage(nextImage.src);
-                    updateUndoRedoButtons();
-                }
-            };
-
-            const pushStateToHistory = () => {
-                state.redoStack = [];
-                state.undoStack.push(state.baseImage);
-                if (state.undoStack.length > 20) {
-                    state.undoStack.shift();
-                }
-                updateUndoRedoButtons();
-            };
-
-            const updateUndoRedoButtons = () => {
-                dom.historyActions.undo.disabled = state.undoStack.length === 0;
-                dom.historyActions.redo.disabled = state.redoStack.length === 0;
-            };
-
-            dom.historyActions.undo.addEventListener('click', undoLastAction);
-            dom.historyActions.redo.addEventListener('click', redoLastAction);
-
-            dom.invertMaskToggle.addEventListener('change', () => {
-                state.selectionInverted = dom.invertMaskToggle.checked;
-                redrawFromCache();
-            });
-
-            dom.metadata.toggle.addEventListener('click', () => {
-                dom.metadata.toggle.classList.toggle('is-expanded');
-                dom.metadata.content.classList.toggle('is-expanded');
-            });
-
-            dom.selectionCanvas.addEventListener('mousedown', async (e) => {
-                if (!state.isSelecting && !state.isDrawing && !state.isCloning) return;
+            // Wheel Zoom
+            area.addEventListener('wheel', e => {
+                if(!App.State.baseImage) return;
                 e.preventDefault();
-                
-                if (state.isCloning) {
-                    if (e.altKey) {
-                        await commitCanvasToBaseImage();
-                        state.cloneSource = getMousePos(e);
-                        dom.imageContainer.classList.add('source-set');
-                        return;
-                    }
-                    if (state.cloneSource) {
-                        isPainting = true;
-                        const paintStart = getMousePos(e);
-                        state.clonePaintOffset = { x: paintStart.x - state.cloneSource.x, y: paintStart.y - state.cloneSource.y };
-                        pushStateToHistory(); // ✨ FIX: Push history at the start of a stroke
-                    }
-                } else if (state.isSelecting) {
-                    await commitCanvasToBaseImage();
-                    isPainting = true;
-                    if (!e.shiftKey) {
-                        state.selectionRects = [];
-                    }
-                    state.selectionStartPoint = getMousePos(e);
-                    state.currentSelectionRect = null;
-                    dom.selectionActions.style.display = 'none';
-                } else if (state.isDrawing) {
-                    await commitCanvasToBaseImage();
-                    isPainting = true;
-                    state.selectionStartPoint = getMousePos(e);
-                    pushStateToHistory(); // ✨ FIX: Push history at the start of a drawing
-                }
+                const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                App.State.zoom = Math.min(Math.max(0.05, App.State.zoom * delta), 10);
+                App.UI.updateTransform();
             });
+        },
 
-            dom.selectionCanvas.addEventListener('mousemove', (e) => {
-                const mousePos = getMousePos(e);
-                selectionCtx.clearRect(0, 0, dom.selectionCanvas.width, dom.selectionCanvas.height);
+        getImgPos(e) {
+            const rect = document.getElementById('main-canvas').getBoundingClientRect();
+            const scaleX = document.getElementById('main-canvas').width / rect.width;
+            const scaleY = document.getElementById('main-canvas').height / rect.height;
+            return {
+                x: (e.clientX - rect.left) * scaleX,
+                y: (e.clientY - rect.top) * scaleY,
+                rawX: e.clientX,
+                rawY: e.clientY
+            };
+        },
 
-                if (state.isCloning) {
-                    const brushSize = parseInt(dom.sliders.brushSize.value, 10);
+        handleDown(e) {
+            if(!App.State.baseImage) return;
+            const tool = App.State.activeTool;
+            const pos = this.getImgPos(e);
+
+            if(tool === 'move') {
+                App.State.isDragging = true;
+                App.State.lastMouse = { x: e.clientX, y: e.clientY };
+                document.getElementById('canvas-area').style.cursor = 'grabbing';
+                return;
+            }
+
+            if(['rect', 'line', 'arrow'].includes(tool)) {
+                App.State.isDrawing = true;
+                App.State.drawStart = pos;
+                return;
+            }
+
+            if(tool === 'clone') {
+                if(e.altKey) {
+                    e.preventDefault();
+                    // Set Source
+                    App.State.cloneSource = pos;
+                    const ind = document.getElementById('clone-source-indicator');
+                    ind.style.display = 'block';
+                    ind.style.left = pos.rawX + 'px';
+                    ind.style.top = pos.rawY + 'px';
+                } else if (App.State.cloneSource) {
+                    App.State.isDrawing = true;
+                    App.State.lastMouse = pos; // Used for interpolation
                     
-                    selectionCtx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-                    selectionCtx.lineWidth = 1;
-                    selectionCtx.setLineDash([]);
-                    selectionCtx.beginPath();
-                    selectionCtx.arc(mousePos.x, mousePos.y, brushSize / 2, 0, Math.PI * 2);
-                    selectionCtx.stroke();
-                    
-                    if (state.cloneSource) {
-                        const offset = state.clonePaintOffset || { x: mousePos.x - state.cloneSource.x, y: mousePos.y - state.cloneSource.y };
-                        const sourceX = mousePos.x - offset.x;
-                        const sourceY = mousePos.y - offset.y;
-                        selectionCtx.strokeStyle = 'rgba(242, 184, 181, 0.8)';
-                        selectionCtx.beginPath();
-                        selectionCtx.arc(sourceX, sourceY, brushSize / 2, 0, Math.PI * 2);
-                        selectionCtx.stroke();
-                    }
+                    // Calculate persistent offset between mouse and source
+                    App.State.cloneOffset = {
+                        x: pos.x - App.State.cloneSource.x,
+                        y: pos.y - App.State.cloneSource.y
+                    };
+
+                    // Create snapshot of CURRENT canvas to prevent self-cloning artifacts
+                    // This ensures we clone from the state at the start of the stroke
+                    const cvs = document.getElementById('main-canvas');
+                    const snapshot = document.createElement('canvas');
+                    snapshot.width = cvs.width;
+                    snapshot.height = cvs.height;
+                    snapshot.getContext('2d').drawImage(cvs, 0, 0);
+                    App.State.cloneSnapshot = snapshot;
+
+                    this.paintClone(pos);
+                } else {
+                    console.log("Hold Alt + Click to set source");
                 }
+            }
+        },
+
+        handleMove(e) {
+            if(!App.State.baseImage) return;
+            const tool = App.State.activeTool;
+            const pos = this.getImgPos(e);
+
+            // Clone Brush Cursor
+            if(tool === 'clone') {
+                const cur = document.getElementById('clone-cursor');
+                cur.style.display = 'block';
+                cur.style.width = App.State.toolSettings.brushSize * App.State.zoom + 'px';
+                cur.style.height = App.State.toolSettings.brushSize * App.State.zoom + 'px';
+                cur.style.left = e.clientX - (parseFloat(cur.style.width)/2) + 'px';
+                cur.style.top = e.clientY - (parseFloat(cur.style.height)/2) + 'px';
+            } else {
+                document.getElementById('clone-cursor').style.display = 'none';
+            }
+
+            if(App.State.isDragging) {
+                const dx = e.clientX - App.State.lastMouse.x;
+                const dy = e.clientY - App.State.lastMouse.y;
+                App.State.pan.x += dx;
+                App.State.pan.y += dy;
+                App.State.lastMouse = { x: e.clientX, y: e.clientY };
+                App.UI.updateTransform();
+                return;
+            }
+
+            if(App.State.isDrawing) {
+                if(['rect', 'line', 'arrow'].includes(tool)) {
+                    // Draw preview on overlay
+                    const ctx = document.getElementById('overlay-canvas').getContext('2d');
+                    ctx.clearRect(0,0, ctx.canvas.width, ctx.canvas.height);
+                    this.drawShape(ctx, App.State.drawStart, pos, tool);
+                }
+                else if (tool === 'clone') {
+                    // Interpolate to prevent gaps
+                    const last = App.State.lastMouse;
+                    const dist = Math.hypot(pos.x - last.x, pos.y - last.y);
+                    const step = Math.max(1, App.State.toolSettings.brushSize * 0.1); // 10% of brush size
+                    
+                    if (dist > step) {
+                        const steps = dist / step;
+                        for (let i = 0; i < steps; i++) {
+                            const t = i / steps;
+                            const x = last.x + (pos.x - last.x) * t;
+                            const y = last.y + (pos.y - last.y) * t;
+                            this.paintClone({x, y});
+                        }
+                    }
+                    this.paintClone(pos);
+                    App.State.lastMouse = pos;
+                }
+            }
+        },
+
+        handleUp(e) {
+            App.State.isDragging = false;
+            document.getElementById('canvas-area').style.cursor = '';
+
+            if(App.State.isDrawing) {
+                App.State.isDrawing = false;
+                const tool = App.State.activeTool;
                 
-                if (state.isSelecting) {
-                    selectionCtx.strokeStyle = "rgba(242, 184, 181, 0.9)";
-                    selectionCtx.lineWidth = 4;
-                    selectionCtx.setLineDash([10, 5]);
-
-                    state.selectionRects.forEach(rect => {
-                        selectionCtx.strokeRect(rect.x, rect.y, rect.w, rect.h);
-                    });
-
-                    if (isPainting) {
-                        const start = state.selectionStartPoint;
-                        const x = Math.min(start.x, mousePos.x);
-                        const y = Math.min(start.y, mousePos.y);
-                        const w = Math.abs(start.x - mousePos.x);
-                        const h = Math.abs(start.y - mousePos.y);
-                        state.currentSelectionRect = { x, y, w, h };
-                        selectionCtx.strokeRect(x, y, w, h);
-                    }
-                }
-
-                if (!isPainting) return;
-                
-                if (state.isCloning) {
-                    const mainCtx = dom.canvas.getContext('2d', { willReadFrequently: true });
-                    const brushSize = parseInt(dom.sliders.brushSize.value, 10);
-                    const brushRadius = brushSize / 2;
-                    const smoothness = parseInt(dom.sliders.brushSmoothness.value, 10) / 100;
-
-                    const destX = mousePos.x;
-                    const destY = mousePos.y;
-                    const sourceX = destX - state.clonePaintOffset.x;
-                    const sourceY = destY - state.clonePaintOffset.y;
-
-                    brushCanvas.width = brushSize;
-                    brushCanvas.height = brushSize;
+                if(['rect', 'line', 'arrow'].includes(tool)) {
+                    // Commit to Main Canvas
+                    const mainCtx = document.getElementById('main-canvas').getContext('2d');
+                    const pos = this.getImgPos(e);
+                    this.drawShape(mainCtx, App.State.drawStart, pos, tool);
                     
-                    brushCtx.clearRect(0, 0, brushSize, brushSize);
-                    brushCtx.drawImage(dom.canvas, sourceX - brushRadius, sourceY - brushRadius, brushSize, brushSize, 0, 0, brushSize, brushSize);
-
-                    brushCtx.globalCompositeOperation = 'destination-in';
-                    const gradient = brushCtx.createRadialGradient(brushRadius, brushRadius, brushRadius * (1 - smoothness), brushRadius, brushRadius, brushRadius);
-                    gradient.addColorStop(0, 'rgba(0,0,0,1)');
-                    gradient.addColorStop(1, 'rgba(0,0,0,0)');
-                    brushCtx.fillStyle = gradient;
-                    brushCtx.fillRect(0, 0, brushSize, brushSize);
-                    brushCtx.globalCompositeOperation = 'source-over';
-
-                    mainCtx.drawImage(brushCanvas, destX - brushRadius, destY - brushRadius);
-
-                } else if (state.isDrawing) {
-                    const start = state.selectionStartPoint;
-                    const x = Math.min(start.x, mousePos.x);
-                    const y = Math.min(start.y, mousePos.y);
-                    const w = Math.abs(start.x - mousePos.x);
-                    const h = Math.abs(start.y - mousePos.y);
+                    // Clear Overlay
+                    const ovCtx = document.getElementById('overlay-canvas').getContext('2d');
+                    ovCtx.clearRect(0,0, ovCtx.canvas.width, ovCtx.canvas.height);
                     
-                    selectionCtx.strokeStyle = dom.drawingColorPicker.value;
-                    selectionCtx.lineWidth = dom.sliders.lineThickness.value;
-                    selectionCtx.setLineDash([]);
-                    selectionCtx.beginPath();
-                    if (state.drawingTool === 'add-rectangle') {
-                        selectionCtx.rect(x, y, w, h);
-                    } else if (state.drawingTool === 'add-line') {
-                        selectionCtx.moveTo(start.x, start.y);
-                        selectionCtx.lineTo(mousePos.x, mousePos.y);
-                    } else if (state.drawingTool === 'add-arrow') {
-                        const headlen = parseInt(dom.sliders.lineThickness.value, 10) * 3;
-                        const dx = mousePos.x - start.x;
-                        const dy = mousePos.y - start.y;
-                        const angle = Math.atan2(dy, dx);
-                        selectionCtx.moveTo(start.x, start.y);
-                        selectionCtx.lineTo(mousePos.x, mousePos.y);
-                        selectionCtx.lineTo(mousePos.x - headlen * Math.cos(angle - Math.PI / 6), mousePos.y - headlen * Math.sin(angle - Math.PI / 6));
-                        selectionCtx.moveTo(mousePos.x, mousePos.y);
-                        selectionCtx.lineTo(mousePos.x - headlen * Math.cos(angle + Math.PI / 6), mousePos.y - headlen * Math.sin(angle + Math.PI / 6));
-                    }
-                    selectionCtx.stroke();
+                    App.History.push();
                 }
-            });
-
-            dom.selectionCanvas.addEventListener('mouseup', (e) => {
-                if (!isPainting) return;
-                isPainting = false;
-
-                if (state.isCloning || state.isDrawing) {
-                    state.canvasIsDirty = true;
+                else if (tool === 'clone') {
+                    // Clean up snapshot
+                    App.State.cloneSnapshot = null;
+                    App.History.push();
                 }
+            }
+        },
 
-                if (state.isCloning) {
-                    state.clonePaintOffset = null;
-                } else if (state.isSelecting) {
-                    if (state.currentSelectionRect && state.currentSelectionRect.w > 5 && state.currentSelectionRect.h > 5) {
-                        state.selectionRects.push(state.currentSelectionRect);
-                    }
-                    state.currentSelectionRect = null;
+        drawShape(ctx, start, end, type) {
+            ctx.beginPath();
+            ctx.strokeStyle = App.State.toolSettings.drawColor;
+            ctx.lineWidth = App.State.toolSettings.drawSize;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
 
-                    if (state.selectionRects.length > 0) {
-                        dom.selectionActions.style.display = 'block';
-                        redrawFromCache();
-                    } else {
-                        deselectArea();
-                    }
-                } else if (state.isDrawing) {
-                    const mainCtx = dom.canvas.getContext('2d', { willReadFrequently: true });
-                    mainCtx.drawImage(dom.selectionCanvas, 0, 0);
-                    selectionCtx.clearRect(0, 0, dom.selectionCanvas.width, dom.selectionCanvas.height);
-                    
-                    state.isDrawing = false;
-                    state.drawingTool = null;
-                    dom.imageContainer.classList.remove('is-selecting');
-                }
-            });
+            if(type === 'rect') {
+                ctx.rect(start.x, start.y, end.x - start.x, end.y - start.y);
+            } 
+            else if (type === 'line') {
+                ctx.moveTo(start.x, start.y);
+                ctx.lineTo(end.x, end.y);
+            }
+            else if (type === 'arrow') {
+                const headlen = App.State.toolSettings.drawSize * 4; 
+                const dx = end.x - start.x;
+                const dy = end.y - start.y;
+                const angle = Math.atan2(dy, dx);
+                ctx.moveTo(start.x, start.y);
+                ctx.lineTo(end.x, end.y);
+                ctx.lineTo(end.x - headlen * Math.cos(angle - Math.PI / 6), end.y - headlen * Math.sin(angle - Math.PI / 6));
+                ctx.moveTo(end.x, end.y);
+                ctx.lineTo(end.x - headlen * Math.cos(angle + Math.PI / 6), end.y - headlen * Math.sin(angle + Math.PI / 6));
+            }
+            ctx.stroke();
+        },
+
+        paintClone(destPos) {
+            if(!App.State.cloneSnapshot || !App.State.cloneOffset) return;
             
-            dom.selectionCanvas.addEventListener('mouseleave', () => {
-                if (state.isCloning && !isPainting) {
-                    selectionCtx.clearRect(0, 0, dom.selectionCanvas.width, dom.selectionCanvas.height);
-                }
+            const ctx = document.getElementById('main-canvas').getContext('2d');
+            const settings = App.State.toolSettings;
+            const size = settings.brushSize;
+            const rad = size / 2;
+            
+            // Calculate where we are pulling pixels FROM
+            const srcX = Math.floor(destPos.x - App.State.cloneOffset.x);
+            const srcY = Math.floor(destPos.y - App.State.cloneOffset.y);
+            
+            // Update the Visual Source Indicator position on screen
+            // We have to convert canvas coordinates back to screen coordinates
+            const canvas = document.getElementById('main-canvas');
+            const rect = canvas.getBoundingClientRect();
+            // Ratio of Screen Pixels to Canvas Pixels
+            const ratioX = rect.width / canvas.width;
+            const ratioY = rect.height / canvas.height;
+            
+            const ind = document.getElementById('clone-source-indicator');
+            if(ind) {
+                ind.style.left = (rect.left + srcX * ratioX) + 'px';
+                ind.style.top = (rect.top + srcY * ratioY) + 'px';
+            }
+
+            // 1. Create temp brush canvas
+            const brushCvs = document.createElement('canvas');
+            brushCvs.width = size;
+            brushCvs.height = size;
+            const bCtx = brushCvs.getContext('2d');
+
+            // 2. Copy pixels from snapshot to brush tip
+            bCtx.drawImage(App.State.cloneSnapshot, srcX - rad, srcY - rad, size, size, 0, 0, size, size);
+
+            // 3. Apply Hardness (Alpha Masking)
+            bCtx.globalCompositeOperation = 'destination-in';
+            
+            const gradient = bCtx.createRadialGradient(rad, rad, rad * (settings.brushHardness/100), rad, rad, rad);
+            gradient.addColorStop(0, 'rgba(0,0,0,1)'); 
+            gradient.addColorStop(1, 'rgba(0,0,0,0)'); 
+            
+            bCtx.fillStyle = gradient;
+            bCtx.fillRect(0, 0, size, size);
+
+            // 4. Draw onto Main Canvas
+            ctx.save();
+            ctx.globalAlpha = settings.brushOpacity / 100;
+            ctx.globalCompositeOperation = 'source-over'; 
+            ctx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
+            ctx.restore();
+        }
+    },
+
+    // --- UI MANIPULATION ---
+    UI: {
+        init() {
+            App.IO.init();
+            App.Tools.init();
+
+            document.querySelectorAll('.tool-btn[data-tool]').forEach(b => {
+                b.addEventListener('click', () => this.selectTool(b.dataset.tool));
             });
 
-            updateResizeDisplay();
-        });
-    </script>
+            document.getElementById('btn-undo').addEventListener('click', () => App.History.undo());
+            document.getElementById('btn-redo').addEventListener('click', () => App.History.redo());
+
+            let timer;
+            document.querySelectorAll('input[data-filter]').forEach(input => {
+                input.addEventListener('input', (e) => {
+                    const key = e.target.dataset.filter;
+                    let val = parseFloat(e.target.value);
+                    const label = document.getElementById(`val-${key}`);
+                    if(label) {
+                        let suffix = '%';
+                        if(['blur', 'pixelate', 'whitepoint', 'blackpoint'].includes(key)) suffix = 'px';
+                        if(['whitepoint', 'blackpoint'].includes(key)) suffix = '';
+                        label.innerText = val + suffix;
+                    }
+                    App.State.filters[key] = val;
+                    clearTimeout(timer);
+                    timer = setTimeout(() => App.Filters.render(), 50);
+                });
+            });
+
+            document.querySelectorAll('button[data-cmd]').forEach(btn => {
+                btn.addEventListener('click', () => this.handleCommand(btn.dataset.cmd));
+            });
+
+            const compBtn = document.getElementById('btn-compare');
+            compBtn.addEventListener('mousedown', () => {
+                const ctx = document.getElementById('main-canvas').getContext('2d');
+                const img = new Image();
+                img.src = App.State.currentCanvas;
+                img.onload = () => { ctx.filter = 'none'; ctx.drawImage(img, 0, 0); }
+            });
+            compBtn.addEventListener('mouseup', () => App.Filters.render());
+        },
+
+        selectTool(tool) {
+            App.State.activeTool = tool;
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            const btn = document.querySelector(`.tool-btn[data-tool="${tool}"]`);
+            if(btn) btn.classList.add('active');
+
+            const canvasWrap = document.getElementById('canvas-wrapper');
+            canvasWrap.className = ''; 
+            if(tool === 'clone') canvasWrap.classList.add('is-cloning');
+            if(['rect', 'line', 'arrow'].includes(tool)) canvasWrap.classList.add('is-drawing');
+
+            if(tool === 'crop') {
+                this.startCrop();
+            } else {
+                if(App.State.cropper) {
+                    App.State.cropper.destroy();
+                    App.State.cropper = null;
+                    document.getElementById('cropper-img').style.display = 'none';
+                    document.getElementById('main-canvas').style.display = 'block';
+                }
+            }
+
+            this.renderToolOptions(tool);
+        },
+
+        renderToolOptions(tool) {
+            const panel = document.getElementById('tool-options-panel');
+            const content = document.getElementById('tool-options-content');
+            
+            if(tool === 'move') {
+                panel.style.display = 'none';
+                return;
+            }
+            
+            panel.style.display = 'block';
+            let html = '';
+
+            if(['rect', 'line', 'arrow'].includes(tool)) {
+                html += `
+                    <div class="control-group">
+                        <div class="control-label"><span>Color</span></div>
+                        <input type="color" id="opt-color" value="${App.State.toolSettings.drawColor}">
+                    </div>
+                    <div class="control-group">
+                        <div class="control-label"><span>Thickness</span></div>
+                        <input type="number" id="opt-size" value="${App.State.toolSettings.drawSize}" min="1" max="50">
+                    </div>
+                `;
+            } else if (tool === 'clone') {
+                html += `
+                    <div class="control-group">
+                        <div class="control-label"><span>Brush Size</span> <span id="lbl-bsize">${App.State.toolSettings.brushSize}px</span></div>
+                        <input type="range" id="opt-brush-size" value="${App.State.toolSettings.brushSize}" min="5" max="200">
+                    </div>
+                    <div class="control-group">
+                        <div class="control-label"><span>Hardness</span> <span id="lbl-bhard">${App.State.toolSettings.brushHardness}%</span></div>
+                        <input type="range" id="opt-brush-hard" value="${App.State.toolSettings.brushHardness}" min="0" max="100">
+                    </div>
+                    <div class="control-group">
+                        <div class="control-label"><span>Opacity</span> <span id="lbl-bopac">${App.State.toolSettings.brushOpacity}%</span></div>
+                        <input type="range" id="opt-brush-opac" value="${App.State.toolSettings.brushOpacity}" min="1" max="100">
+                    </div>
+                    <div class="control-group" style="font-size:11px; color:#888;">
+                        Hold Alt + Click to set source.
+                    </div>
+                `;
+            } else if (tool === 'crop') {
+                html += `<button class="btn btn-primary" onclick="App.UI.applyCrop()">Apply Crop</button>`;
+            }
+
+            content.innerHTML = html;
+
+            // Bind inputs
+            const col = document.getElementById('opt-color');
+            if(col) col.addEventListener('input', e => App.State.toolSettings.drawColor = e.target.value);
+            
+            const sz = document.getElementById('opt-size');
+            if(sz) sz.addEventListener('input', e => App.State.toolSettings.drawSize = parseInt(e.target.value));
+
+            const bsz = document.getElementById('opt-brush-size');
+            if(bsz) bsz.addEventListener('input', e => {
+                App.State.toolSettings.brushSize = parseInt(e.target.value);
+                document.getElementById('lbl-bsize').innerText = e.target.value + "px";
+            });
+
+            const bhard = document.getElementById('opt-brush-hard');
+            if(bhard) bhard.addEventListener('input', e => {
+                App.State.toolSettings.brushHardness = parseInt(e.target.value);
+                document.getElementById('lbl-bhard').innerText = e.target.value + "%";
+            });
+
+            const bopac = document.getElementById('opt-brush-opac');
+            if(bopac) bopac.addEventListener('input', e => {
+                App.State.toolSettings.brushOpacity = parseInt(e.target.value);
+                document.getElementById('lbl-bopac').innerText = e.target.value + "%";
+            });
+        },
+
+        startCrop() {
+            const cvs = document.getElementById('main-canvas');
+            const img = document.getElementById('cropper-img');
+            img.src = cvs.toDataURL(); 
+            img.style.display = 'block';
+            cvs.style.display = 'none';
+            App.State.cropper = new Cropper(img, { viewMode: 1, background: false, autoCropArea: 0.8 });
+        },
+
+        applyCrop() {
+            if(App.State.cropper) {
+                const newCvs = App.State.cropper.getCroppedCanvas();
+                const data = newCvs.toDataURL();
+                
+                const main = document.getElementById('main-canvas');
+                main.width = newCvs.width; main.height = newCvs.height;
+                main.getContext('2d').drawImage(newCvs, 0, 0);
+                
+                const ov = document.getElementById('overlay-canvas');
+                ov.width = newCvs.width; ov.height = newCvs.height;
+
+                document.getElementById('resize-w').value = newCvs.width;
+                document.getElementById('resize-h').value = newCvs.height;
+
+                this.selectTool('move');
+                App.History.push();
+            }
+        },
+
+        handleCommand(cmd) {
+            if(!App.State.baseImage) return;
+            const f = App.State.filters;
+            if(cmd === 'rotate-l') this.applyRotation(-90);
+            if(cmd === 'rotate-r') this.applyRotation(90);
+            if(cmd === 'flip-h') this.applyFlip(true, false);
+            if(cmd === 'flip-v') this.applyFlip(false, true);
+            if(cmd === 'grayscale') { f.grayscale = !f.grayscale; App.Filters.render(); }
+            if(cmd === 'invert') { f.invert = !f.invert; App.Filters.render(); }
+            if(cmd === 'reset-all') {
+                App.State.filters = App.IO.getResetFilters();
+                this.resetControls();
+                App.Filters.render();
+            }
+        },
+
+        applyRotation(deg) {
+            const cvs = document.createElement('canvas');
+            const ctx = cvs.getContext('2d');
+            const img = new Image();
+            img.src = document.getElementById('main-canvas').toDataURL();
+            img.onload = () => {
+                const rad = deg * Math.PI / 180;
+                const sin = Math.abs(Math.sin(rad));
+                const cos = Math.abs(Math.cos(rad));
+                cvs.width = img.width * cos + img.height * sin;
+                cvs.height = img.width * sin + img.height * cos;
+                ctx.translate(cvs.width/2, cvs.height/2);
+                ctx.rotate(rad);
+                ctx.drawImage(img, -img.width/2, -img.height/2);
+                this.commitTransform(cvs);
+            };
+        },
+
+        applyCustomRotation() {
+            const val = parseFloat(document.getElementById('custom-rot-val').value);
+            if(val !== 0) this.applyRotation(val);
+        },
+
+        applyFlip(h, v) {
+            const cvs = document.createElement('canvas');
+            const img = document.getElementById('main-canvas');
+            cvs.width = img.width; cvs.height = img.height;
+            const ctx = cvs.getContext('2d');
+            ctx.translate(h ? cvs.width : 0, v ? cvs.height : 0);
+            ctx.scale(h ? -1 : 1, v ? -1 : 1);
+            ctx.drawImage(img, 0, 0);
+            this.commitTransform(cvs);
+        },
+
+        applyResize() {
+            const w = parseInt(document.getElementById('resize-w').value);
+            const h = parseInt(document.getElementById('resize-h').value);
+            if(!w || !h) return;
+            
+            const cvs = document.createElement('canvas');
+            cvs.width = w; cvs.height = h;
+            const ctx = cvs.getContext('2d');
+            ctx.drawImage(document.getElementById('main-canvas'), 0, 0, w, h);
+            this.commitTransform(cvs);
+        },
+
+        commitTransform(tempCanvas) {
+            const main = document.getElementById('main-canvas');
+            main.width = tempCanvas.width; main.height = tempCanvas.height;
+            main.getContext('2d').drawImage(tempCanvas, 0, 0);
+            
+            const ov = document.getElementById('overlay-canvas');
+            ov.width = tempCanvas.width; ov.height = tempCanvas.height;
+            
+            App.History.push();
+        },
+
+        updateTransform() {
+            const el = document.getElementById('canvas-wrapper');
+            el.style.transform = `translate(${App.State.pan.x}px, ${App.State.pan.y}px) scale(${App.State.zoom})`;
+        },
+
+        resetControls() {
+            const f = App.State.filters;
+            for(let key in f) {
+                const input = document.querySelector(`input[data-filter="${key}"]`);
+                if(input) {
+                    input.value = f[key];
+                    input.dispatchEvent(new Event('input')); 
+                }
+            }
+        },
+
+        toggleHistoryBtns() {
+            document.getElementById('btn-undo').disabled = App.State.historyIndex <= 0;
+            document.getElementById('btn-redo').disabled = App.State.historyIndex >= App.State.history.length - 1;
+        },
+
+        updateFilename(name) { document.getElementById('filename-display').innerText = name; },
+        setBusy(busy) { document.getElementById('global-loader').style.display = busy ? 'inline-block' : 'none'; },
+        closeModal() { document.getElementById('save-modal').classList.remove('open'); }
+    },
+
+    // --- HISTORY ---
+    History: {
+        push() {
+            if(App.State.history.length > 10) App.State.history.shift();
+            const data = document.getElementById('main-canvas').toDataURL();
+            App.State.history = App.State.history.slice(0, App.State.historyIndex + 1);
+            App.State.history.push(data);
+            App.State.historyIndex = App.State.history.length - 1;
+            App.State.currentCanvas = data;
+            App.UI.toggleHistoryBtns();
+        },
+        undo() {
+            if(App.State.historyIndex > 0) {
+                App.State.historyIndex--;
+                this.load();
+            }
+        },
+        redo() {
+            if(App.State.historyIndex < App.State.history.length - 1) {
+                App.State.historyIndex++;
+                this.load();
+            }
+        },
+        load() {
+            const data = App.State.history[App.State.historyIndex];
+            App.State.currentCanvas = data;
+            const img = new Image();
+            img.onload = () => {
+                const cvs = document.getElementById('main-canvas');
+                cvs.width = img.width; cvs.height = img.height;
+                cvs.getContext('2d').drawImage(img, 0, 0);
+                document.getElementById('overlay-canvas').width = img.width;
+                document.getElementById('overlay-canvas').height = img.height;
+                App.Filters.render(); // Re-run filters on new base
+            };
+            img.src = data;
+            App.UI.toggleHistoryBtns();
+        }
+    }
+};
+
+function toggleSection(id) {
+    const el = document.getElementById(id);
+    el.classList.toggle('hidden');
+}
+
+document.addEventListener('DOMContentLoaded', () => App.UI.init());
+</script>
 </body>
 </html>
