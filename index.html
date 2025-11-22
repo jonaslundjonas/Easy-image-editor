@@ -476,6 +476,7 @@
     <!-- TOOLBAR -->
     <aside class="toolbar">
         <button class="tool-btn active" id="tool-move" title="Move Layer (Hold Space to Pan)" data-tool="move"><i class="ph ph-arrows-out"></i></button>
+        <button class="tool-btn" id="tool-hand" title="Hand Tool (Pan)" data-tool="hand"><i class="ph ph-hand-palm"></i></button>
         <button class="tool-btn" id="tool-crop" title="Crop (Global)" data-tool="crop"><i class="ph ph-crop"></i></button>
         <button class="tool-btn" id="tool-zoom" title="Zoom Tool" data-tool="zoom"><i class="ph ph-magnifying-glass"></i></button>
         
@@ -1265,8 +1266,23 @@ const App = {
                 }
             });
 
-            // Disable scroll zoom as requested
-            // area.addEventListener('wheel', e => { ... }); 
+            area.addEventListener('wheel', e => {
+                if(App.State.layers.length === 0) return;
+                e.preventDefault();
+                
+                // Pan Logic:
+                // Wheel -> Vertical Pan
+                // Shift+Wheel -> Horizontal Pan
+                const factor = 1.5; // Speed multiplier
+                
+                if(e.shiftKey) {
+                     App.State.pan.x -= e.deltaY * factor;
+                } else {
+                     App.State.pan.y -= e.deltaY * factor;
+                }
+                
+                App.UI.updateTransform();
+            }, { passive: false });
         },
 
         getImgPos(e) {
@@ -1292,6 +1308,15 @@ const App = {
                     App.State.dragMode = 'layer';
                     document.getElementById('canvas-area').style.cursor = 'move';
                 }
+                return;
+            }
+
+            // Hand Tool (Explicit Pan)
+            if(tool === 'hand') {
+                App.State.isDragging = true;
+                App.State.lastMouse = { x: e.clientX, y: e.clientY };
+                App.State.dragMode = 'pan';
+                document.getElementById('canvas-area').style.cursor = 'grabbing';
                 return;
             }
 
@@ -1941,6 +1966,11 @@ const App = {
             if(['sel-rect', 'sel-oval', 'sel-lasso'].includes(tool)) canvasWrap.classList.add('is-selecting');
             if(tool === 'sel-wand') canvasWrap.classList.add('is-selecting');
 
+            // Hide clone source indicator if switching away from clone tool
+            if (tool !== 'clone') {
+                document.getElementById('clone-source-indicator').style.display = 'none';
+            }
+
             if(tool === 'crop') this.startCrop();
             else {
                 if(App.State.cropper) {
@@ -2007,7 +2037,7 @@ const App = {
                 html += `
                     <div class="control-group">
                         <div class="control-label"><span>Zoom Level</span> <span id="lbl-zoom">${currentZoom}%</span></div>
-                        <input type="range" id="opt-zoom" value="${currentZoom}" min="25" max="600">
+                        <input type="range" id="opt-zoom" value="${currentZoom}" min="5" max="600">
                     </div>
                 `;
             }
@@ -2171,7 +2201,10 @@ const App = {
         updateFilename(name) { document.getElementById('filename-display').innerText = name; },
         setBusy(busy) { document.getElementById('global-loader').style.display = busy ? 'inline-block' : 'none'; },
         
-        // Removed toggleHistoryBtns function as buttons are gone
+        toggleHistoryBtns() {
+            document.getElementById('btn-undo').disabled = App.State.historyIndex <= 0;
+            document.getElementById('btn-redo').disabled = App.State.historyIndex >= App.State.history.length - 1;
+        }
     },
 
     // --- HISTORY ---
