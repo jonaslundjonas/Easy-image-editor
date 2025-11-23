@@ -109,7 +109,24 @@
             padding: 15px 0;
             gap: 10px;
             overflow-y: auto;
+            overflow-x: hidden; /* Prevent horizontal scroll */
         }
+
+        /* Toolbar Scrollbar Customization */
+        .toolbar::-webkit-scrollbar {
+            width: 5px;
+        }
+        .toolbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .toolbar::-webkit-scrollbar-thumb {
+            background: #3f3f46; /* Dark Grey */
+            border-radius: 4px;
+        }
+        .toolbar::-webkit-scrollbar-thumb:hover {
+            background: #52525b;
+        }
+
         .tool-btn {
             width: 36px;
             height: 36px;
@@ -486,6 +503,7 @@
         <button class="tool-btn" id="tool-sel-oval" title="Oval Select" data-tool="sel-oval"><i class="ph ph-circle"></i></button>
         <button class="tool-btn" id="tool-sel-lasso" title="Lasso Select" data-tool="sel-lasso"><i class="ph ph-lasso"></i></button>
         <button class="tool-btn" id="tool-sel-wand" title="Magic Wand" data-tool="sel-wand"><i class="ph ph-magic-wand"></i></button>
+        <button class="tool-btn" id="tool-sel-brush" title="Brush Select" data-tool="sel-brush"><i class="ph ph-paint-brush-broad"></i></button>
 
         <div style="height: 1px; background: var(--border); width: 60%;"></div>
         
@@ -1341,6 +1359,12 @@ const App = {
                 this.paintBrush(pos);
             }
 
+            if(tool === 'sel-brush') {
+                App.State.isDrawing = true;
+                App.State.lastMouse = pos;
+                this.paintSelectionBrush(pos);
+            }
+
             if(tool === 'smudge') {
                 App.State.isDrawing = true;
                 App.State.lastMouse = pos;
@@ -1372,7 +1396,7 @@ const App = {
 
             // Brush Cursor Visibility
             const cur = document.getElementById('clone-cursor');
-            if(tool === 'clone' || tool === 'paint' || tool === 'eraser' || tool === 'smudge') {
+            if(tool === 'clone' || tool === 'paint' || tool === 'eraser' || tool === 'smudge' || tool === 'sel-brush') {
                 cur.style.display = 'block';
                 cur.style.width = App.State.toolSettings.brushSize * App.State.zoom + 'px';
                 cur.style.height = App.State.toolSettings.brushSize * App.State.zoom + 'px';
@@ -1383,6 +1407,8 @@ const App = {
                     cur.style.borderColor = 'red'; cur.style.borderStyle = 'dashed';
                 } else if(tool === 'smudge') {
                     cur.style.borderColor = 'cyan'; cur.style.borderStyle = 'solid';
+                } else if(tool === 'sel-brush') {
+                    cur.style.borderColor = '#6366f1'; cur.style.borderStyle = 'dashed';
                 } else {
                     cur.style.borderColor = 'white'; cur.style.borderStyle = 'solid';
                 }
@@ -1441,6 +1467,22 @@ const App = {
                         }
                     }
                     this.paintBrush(pos);
+                    App.State.lastMouse = pos;
+                }
+                else if (tool === 'sel-brush') {
+                    const last = App.State.lastMouse;
+                    const dist = Math.hypot(pos.x - last.x, pos.y - last.y);
+                    const step = Math.max(1, App.State.toolSettings.brushSize * 0.1);
+                    if (dist > step) {
+                        const steps = dist / step;
+                        for (let i = 0; i < steps; i++) {
+                            const t = i / steps;
+                            const x = last.x + (pos.x - last.x) * t;
+                            const y = last.y + (pos.y - last.y) * t;
+                            this.paintSelectionBrush({x, y});
+                        }
+                    }
+                    this.paintSelectionBrush(pos);
                     App.State.lastMouse = pos;
                 }
                 else if (tool === 'smudge') {
@@ -1511,11 +1553,51 @@ const App = {
                     App.UI.renderLayerList();
                     App.History.push();
                 }
+                else if (tool === 'sel-brush') {
+                    App.Render.update();
+                }
             }
         },
 
         // ... existing helpers ...
         
+        paintSelectionBrush(pos) {
+            // Ensure mask exists
+            if (!App.State.selection.active || !App.State.selection.mask) {
+                const mask = document.createElement('canvas');
+                mask.width = App.State.width;
+                mask.height = App.State.height;
+                App.State.selection = { active: true, mask: mask, type: 'brush' };
+            }
+            
+            const ctx = App.State.selection.mask.getContext('2d');
+            const settings = App.State.toolSettings;
+            const size = settings.brushSize;
+            const hardness = settings.brushHardness;
+            const rad = size / 2;
+
+            // Brush tip
+            const brush = document.createElement('canvas');
+            brush.width = size; brush.height = size;
+            const bCtx = brush.getContext('2d');
+            
+            const gradient = bCtx.createRadialGradient(rad, rad, rad * (hardness / 100), rad, rad, rad);
+            // Use opacity setting for selection strength (white alpha)
+            const alpha = settings.brushOpacity / 100;
+            gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            
+            bCtx.fillStyle = gradient;
+            bCtx.fillRect(0, 0, size, size);
+            
+            ctx.save();
+            ctx.globalCompositeOperation = 'source-over'; // Add to selection
+            ctx.drawImage(brush, pos.x - rad, pos.y - rad);
+            ctx.restore();
+            
+            App.Render.update();
+        },
+
         paintSmudge(fromPos, toPos) {
             const layer = App.Layers.getActive();
             if(!layer) return;
@@ -2021,6 +2103,16 @@ const App = {
                     <div class="control-group"><div class="control-label"><span>Opacity</span> <span id="lbl-bopac">${App.State.toolSettings.brushOpacity}%</span></div><input type="range" id="opt-brush-opac" value="${App.State.toolSettings.brushOpacity}" min="1" max="100"></div>
                     <div style="font-size:11px; color:#888;">Hold Alt + Click to set source.</div>
                 `;
+            } else if (tool === 'sel-brush') {
+                html += `
+                    <div class="control-group"><div class="control-label"><span>Size</span> <span id="lbl-bsize">${App.State.toolSettings.brushSize}px</span></div><input type="range" id="opt-brush-size" value="${App.State.toolSettings.brushSize}" min="5" max="999"></div>
+                    <div class="control-group"><div class="control-label"><span>Hardness</span> <span id="lbl-bhard">${App.State.toolSettings.brushHardness}%</span></div><input type="range" id="opt-brush-hard" value="${App.State.toolSettings.brushHardness}" min="0" max="100"></div>
+                    <div class="control-group"><div class="control-label"><span>Opacity (Strength)</span> <span id="lbl-bopac">${App.State.toolSettings.brushOpacity}%</span></div><input type="range" id="opt-brush-opac" value="${App.State.toolSettings.brushOpacity}" min="1" max="100"></div>
+                    <div class="btn-grid" style="margin-top:10px;">
+                        <button class="btn" onclick="App.Tools.invertSelection()"><i class="ph ph-swap"></i> Invert</button>
+                        <button class="btn" onclick="App.Tools.clearSelection()"><i class="ph ph-x"></i> Deselect</button>
+                    </div>
+                `;
             } else if (['sel-rect', 'sel-oval', 'sel-lasso', 'sel-wand'].includes(tool)) {
                 // Removed Copy/Paste buttons as they are now in the Edit menu
                 if(tool === 'sel-wand') {
@@ -2201,8 +2293,7 @@ const App = {
         setBusy(busy) { document.getElementById('global-loader').style.display = busy ? 'inline-block' : 'none'; },
         
         toggleHistoryBtns() {
-            document.getElementById('btn-undo').disabled = App.State.historyIndex <= 0;
-            document.getElementById('btn-redo').disabled = App.State.historyIndex >= App.State.history.length - 1;
+            // Removed history buttons
         }
     },
 
