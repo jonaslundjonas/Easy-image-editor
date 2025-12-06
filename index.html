@@ -40,9 +40,10 @@
             height: 100vh;
             display: grid;
             grid-template-columns: 60px 1fr 320px;
-            grid-template-rows: 50px 1fr;
+            grid-template-rows: 50px 40px 1fr; /* Added row for tabs */
             grid-template-areas: 
                 "header header header"
+                "tools tabs sidebar"
                 "tools canvas sidebar";
             overflow: hidden;
         }
@@ -77,10 +78,7 @@
             top: 100%;
             margin-top: 4px; 
         }
-        /* Removed the :hover rule so it only opens on click via JS */
         .dropdown.open .dropdown-content { display: block; }
-        
-        /* Active state for the button when menu is open */
         .dropdown.open > button { background-color: var(--bg-surface); color: var(--text-main); }
 
         .dropdown-item {
@@ -98,6 +96,51 @@
         .dropdown-item i { font-size: 16px; color: var(--text-muted); }
         .dropdown-item:hover i { color: var(--accent); }
 
+        /* --- TABS BAR (New) --- */
+        .tabs-bar {
+            grid-area: tabs;
+            background: #121214;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            gap: 5px;
+            overflow-x: auto;
+            border-bottom: 1px solid var(--border);
+        }
+        .tab {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-bottom: none;
+            padding: 6px 12px;
+            border-radius: 6px 6px 0 0;
+            font-size: 12px;
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 100px;
+            max-width: 200px;
+            position: relative;
+            top: 4px; /* Push down to sit on border */
+            height: 36px;
+        }
+        .tab:hover { background: var(--bg-surface); color: var(--text-main); }
+        .tab.active {
+            background: var(--bg-app); /* Match body bg */
+            color: var(--text-main);
+            border-top: 2px solid var(--accent);
+            z-index: 10;
+        }
+        .tab-close {
+            margin-left: auto;
+            border-radius: 50%;
+            padding: 2px;
+            font-size: 10px;
+        }
+        .tab-close:hover { background: #ff4444; color: white; }
+        .tab-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
         /* --- TOOLBAR (Left) --- */
         .toolbar {
             grid-area: tools;
@@ -109,23 +152,13 @@
             padding: 15px 0;
             gap: 10px;
             overflow-y: auto;
-            overflow-x: hidden; /* Prevent horizontal scroll */
+            overflow-x: hidden; 
         }
 
-        /* Toolbar Scrollbar Customization */
-        .toolbar::-webkit-scrollbar {
-            width: 5px;
-        }
-        .toolbar::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .toolbar::-webkit-scrollbar-thumb {
-            background: #3f3f46; /* Dark Grey */
-            border-radius: 4px;
-        }
-        .toolbar::-webkit-scrollbar-thumb:hover {
-            background: #52525b;
-        }
+        .toolbar::-webkit-scrollbar { width: 5px; }
+        .toolbar::-webkit-scrollbar-track { background: transparent; }
+        .toolbar::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
+        .toolbar::-webkit-scrollbar-thumb:hover { background: #52525b; }
 
         .tool-btn {
             width: 36px;
@@ -482,9 +515,12 @@
             </div>
         </div>
 
-        <div class="file-info" id="filename-display">Drag & Drop an image</div>
-        
-        <div style="display: flex; gap: 10px; align-items: center;">
+        <!-- TABS BAR -->
+        <div class="tabs-bar" id="tabs-bar">
+            <!-- Tabs injected here -->
+        </div>
+
+        <div style="display: flex; gap: 10px; align-items: center; padding-right: 20px;">
             <button class="btn" id="btn-compare" disabled>Hold to Compare</button>
         </div>
         <input type="file" id="file-input" hidden accept="image/*,application/pdf">
@@ -520,14 +556,13 @@
         <button class="tool-btn" id="tool-draw-arrow" title="Draw Arrow" data-tool="arrow"><i class="ph ph-arrow-up-right"></i></button>
         
         <div style="margin-top: auto;"></div>
-        <!-- Removed Undo/Redo buttons from left panel -->
     </aside>
 
     <!-- CANVAS -->
     <main class="canvas-area" id="canvas-area">
         <div id="drop-zone">
             <i class="ph ph-upload-simple"></i>
-            <span>Drop image to add as Layer</span>
+            <span>Drop image to open</span>
         </div>
         <div id="canvas-wrapper">
             <!-- Main canvas acts as the compositor -->
@@ -782,38 +817,31 @@
     </div>
 
 <script>
+// --- PROJECT CLASS ---
+class Project {
+    constructor(width, height, name) {
+        this.id = crypto.randomUUID();
+        this.name = name || "Untitled";
+        this.width = width;
+        this.height = height;
+        this.layers = [];
+        this.activeLayerId = null;
+        this.layerCounter = 0;
+        this.history = [];
+        this.historyIndex = -1;
+        this.zoom = Math.min((window.innerWidth-400)/width, (window.innerHeight-100)/height, 1) || 1;
+        this.pan = { x: 0, y: 0 };
+        this.selection = { active: false, mask: null, type: null, wandTolerance: 30, tempPath: [] };
+    }
+}
+
 const App = {
     State: {
-        width: 800,
-        height: 600,
-        filename: "untitled",
-        zoom: 1,
-        pan: { x: 0, y: 0 },
+        projects: [],
+        activeProjectIndex: -1,
+        
+        // Global Tool State
         activeTool: 'move',
-        isDragging: false,
-        isDrawing: false,
-        lastMouse: { x: 0, y: 0 },
-        drawStart: { x: 0, y: 0 },
-        isSpacePressed: false,
-        dragMode: null, // 'pan' or 'layer'
-        
-        layers: [], 
-        activeLayerId: null,
-        layerCounter: 0,
-        
-        history: [],
-        historyIndex: -1,
-        clipboard: null,
-        
-        selection: {
-            active: false,
-            mask: null, // Canvas element
-            type: null,
-            wandTolerance: 30
-        },
-
-        cloneSource: null,
-        cloneLayerId: null,
         toolSettings: {
             drawColor: '#f2b8b5',
             drawSize: 5,
@@ -821,36 +849,61 @@ const App = {
             brushHardness: 50,
             brushOpacity: 100
         },
+        
+        // Interaction State
+        isDragging: false,
+        isDrawing: false,
+        lastMouse: { x: 0, y: 0 },
+        drawStart: { x: 0, y: 0 },
+        isSpacePressed: false,
+        dragMode: null, // 'pan' or 'layer'
+        
+        clipboard: null, // Global Clipboard for cross-project pasting
+        cloneSource: null, // { projectIndex, x, y } - Global clone source? 
+        // Cloning across projects is complex. Let's keep clone source local to interaction, 
+        // but maybe allow sampling from active project.
+        // For simplicity, clone source is reset when switching projects or tools for now.
+        // But requested features imply cross-image copy/paste. Clone across images is advanced.
+        // We will implement copy/paste across images via global clipboard.
+        
         cropper: null
+    },
+    
+    getProject() {
+        if(this.State.activeProjectIndex < 0 || this.State.activeProjectIndex >= this.State.projects.length) return null;
+        return this.State.projects[this.State.activeProjectIndex];
     },
 
     // --- LAYERS LOGIC ---
     Layers: {
-        createId() { return 'layer_' + (++App.State.layerCounter); },
+        createId(project) { return 'layer_' + (++project.layerCounter); },
         
         addLayer(source, name) {
-            const id = this.createId();
+            const project = App.getProject();
+            if(!project) return;
+            
+            const id = this.createId(project);
             const canvas = document.createElement('canvas');
             const originalCanvas = document.createElement('canvas'); 
             
-            canvas.width = App.State.width;
-            canvas.height = App.State.height;
-            originalCanvas.width = App.State.width;
-            originalCanvas.height = App.State.height;
+            canvas.width = project.width;
+            canvas.height = project.height;
+            originalCanvas.width = project.width;
+            originalCanvas.height = project.height;
 
             const ctx = canvas.getContext('2d');
             const oCtx = originalCanvas.getContext('2d');
             
             if(source) {
-                const w = Math.min(source.width, App.State.width);
-                const h = Math.min(source.height, App.State.height);
+                const w = Math.min(source.width, project.width);
+                const h = Math.min(source.height, project.height);
                 ctx.drawImage(source, 0, 0, w, h);
                 oCtx.drawImage(source, 0, 0, w, h);
             }
 
             const newLayer = {
                 id: id,
-                name: name || `Layer ${App.State.layers.length + 1}`,
+                name: name || `Layer ${project.layers.length + 1}`,
                 canvas: canvas,
                 originalCanvas: originalCanvas, // Base for filters
                 visible: true,
@@ -860,7 +913,7 @@ const App = {
                 x: 0, y: 0
             };
 
-            App.State.layers.unshift(newLayer);
+            project.layers.unshift(newLayer);
             this.setActive(id);
             App.Render.update();
             App.UI.renderLayerList();
@@ -879,33 +932,45 @@ const App = {
         addEmptyLayer() { this.addLayer(null, "New Layer"); },
 
         deleteActiveLayer() {
-            if(App.State.layers.length <= 1) { alert("Cannot delete the last layer."); return; }
-            const idx = App.State.layers.findIndex(l => l.id === App.State.activeLayerId);
+            const project = App.getProject();
+            if(!project) return;
+            
+            if(project.layers.length <= 1) { alert("Cannot delete the last layer."); return; }
+            const idx = project.layers.findIndex(l => l.id === project.activeLayerId);
             if(idx > -1) {
-                App.State.layers.splice(idx, 1);
-                this.setActive(App.State.layers[0].id);
+                project.layers.splice(idx, 1);
+                this.setActive(project.layers[0].id);
                 App.Render.update();
                 App.UI.renderLayerList();
                 App.History.push();
             }
         },
 
-        getActive() { return App.State.layers.find(l => l.id === App.State.activeLayerId); },
+        getActive() { 
+            const project = App.getProject();
+            if(!project) return null;
+            return project.layers.find(l => l.id === project.activeLayerId); 
+        },
 
         setActive(id) {
-            App.State.activeLayerId = id;
+            const project = App.getProject();
+            if(!project) return;
+            project.activeLayerId = id;
             App.UI.renderLayerList();
             App.UI.syncControls();
         },
 
         moveLayer(dir) {
-            const idx = App.State.layers.findIndex(l => l.id === App.State.activeLayerId);
+            const project = App.getProject();
+            if(!project) return;
+            
+            const idx = project.layers.findIndex(l => l.id === project.activeLayerId);
             if(idx < 0) return;
             const newIdx = idx - dir; 
-            if(newIdx >= 0 && newIdx < App.State.layers.length) {
-                const temp = App.State.layers[idx];
-                App.State.layers[idx] = App.State.layers[newIdx];
-                App.State.layers[newIdx] = temp;
+            if(newIdx >= 0 && newIdx < project.layers.length) {
+                const temp = project.layers[idx];
+                project.layers[idx] = project.layers[newIdx];
+                project.layers[newIdx] = temp;
                 App.Render.update();
                 App.UI.renderLayerList();
                 App.History.push();
@@ -913,10 +978,13 @@ const App = {
         },
 
         mergeDown() {
-            const idx = App.State.layers.findIndex(l => l.id === App.State.activeLayerId);
-            if(idx >= App.State.layers.length - 1 || idx < 0) return; 
-            const top = App.State.layers[idx];
-            const bottom = App.State.layers[idx+1];
+            const project = App.getProject();
+            if(!project) return;
+
+            const idx = project.layers.findIndex(l => l.id === project.activeLayerId);
+            if(idx >= project.layers.length - 1 || idx < 0) return; 
+            const top = project.layers[idx];
+            const bottom = project.layers[idx+1];
             
             const ctx = bottom.canvas.getContext('2d');
             const oCtx = bottom.originalCanvas.getContext('2d'); 
@@ -924,13 +992,12 @@ const App = {
             ctx.save();
             ctx.globalAlpha = top.opacity / 100;
             ctx.globalCompositeOperation = top.blendMode;
-            // Apply active selection mask if exists? No, merge usually ignores selection
-            ctx.drawImage(top.canvas, 0, 0);
+            ctx.drawImage(top.canvas, top.x - bottom.x, top.y - bottom.y); // Adjust for relative position
             ctx.restore();
 
-            oCtx.drawImage(bottom.canvas, 0, 0);
+            oCtx.drawImage(bottom.canvas, 0, 0); // Bake current state
 
-            App.State.layers.splice(idx, 1);
+            project.layers.splice(idx, 1);
             this.setActive(bottom.id);
             App.Render.update();
             App.UI.renderLayerList();
@@ -948,7 +1015,9 @@ const App = {
 
         toggleVisibility(id, e) {
             e.stopPropagation();
-            const layer = App.State.layers.find(l => l.id === id);
+            const project = App.getProject();
+            if(!project) return;
+            const layer = project.layers.find(l => l.id === id);
             if(layer) {
                 layer.visible = !layer.visible;
                 App.Render.update();
@@ -962,9 +1031,25 @@ const App = {
         update() {
             const canvas = document.getElementById('main-canvas');
             const ctx = canvas.getContext('2d');
+            const project = App.getProject();
+            
+            if(!project) {
+                ctx.clearRect(0,0, canvas.width, canvas.height);
+                return;
+            }
+
+            // Sync Canvas Size
+            if(canvas.width !== project.width || canvas.height !== project.height) {
+                canvas.width = project.width;
+                canvas.height = project.height;
+                const ov = document.getElementById('overlay-canvas');
+                ov.width = project.width;
+                ov.height = project.height;
+            }
+
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            const layersToRender = [...App.State.layers].reverse();
+            const layersToRender = [...project.layers].reverse();
             
             layersToRender.forEach(layer => {
                 if(!layer.visible) return;
@@ -979,19 +1064,17 @@ const App = {
             const ovCtx = document.getElementById('overlay-canvas').getContext('2d');
             ovCtx.clearRect(0, 0, ovCtx.canvas.width, ovCtx.canvas.height);
             
-            if(App.State.selection.active && App.State.selection.mask) {
-                // 1. Draw the mask with tint
+            if(project.selection.active && project.selection.mask) {
                 ovCtx.save();
                 ovCtx.globalAlpha = 0.2;
-                ovCtx.fillStyle = '#6366f1'; // Indigo tint
-                ovCtx.drawImage(App.State.selection.mask, 0, 0);
+                ovCtx.fillStyle = '#6366f1'; 
+                ovCtx.drawImage(project.selection.mask, 0, 0);
                 ovCtx.restore();
 
-                // 2. Draw visible outline (Simulated marching ants)
-                if(App.State.selection.type !== 'wand') {
-                    if(App.State.selection.pathFunc) {
+                if(project.selection.type !== 'wand') {
+                    if(project.selection.pathFunc) {
                         ovCtx.beginPath();
-                        App.State.selection.pathFunc(ovCtx);
+                        project.selection.pathFunc(ovCtx);
                         ovCtx.strokeStyle = 'white'; ovCtx.lineWidth = 2;
                         ovCtx.setLineDash([6, 4]);
                         ovCtx.stroke();
@@ -1004,6 +1087,8 @@ const App = {
             } else {
                 ovCtx.canvas.classList.remove('ants');
             }
+            
+            App.UI.updateTransform(); // Update zoom/pan visual
         }
     },
 
@@ -1019,11 +1104,12 @@ const App = {
         renderLayer(layer) {
             const ctx = layer.canvas.getContext('2d');
             const f = layer.filters;
+            const project = App.getProject();
 
             // 1. Reset to original
             ctx.clearRect(0,0, layer.canvas.width, layer.canvas.height);
             
-            // 2. Apply Filters to a temp canvas
+            // 2. Apply Filters
             const tempC = document.createElement('canvas');
             tempC.width = layer.canvas.width; tempC.height = layer.canvas.height;
             const tCtx = tempC.getContext('2d');
@@ -1045,25 +1131,20 @@ const App = {
                 if(f.pixelate > 0) this.applyPixelate(tCtx, tempC.width, tempC.height, f.pixelate);
             }
 
-            // 3. If Selection is Active, Mask the Filters!
-            // Result = Original (outside selection) + Filtered (inside selection)
-            if(App.State.selection.active && App.State.selection.mask) {
-                // A. Draw Original fully
+            // 3. Selection Mask
+            if(project && project.selection.active && project.selection.mask) {
                 ctx.drawImage(layer.originalCanvas, 0, 0);
                 
-                // B. Cut out the Filtered result using the selection mask
                 const maskedFiltered = document.createElement('canvas');
                 maskedFiltered.width = layer.canvas.width; maskedFiltered.height = layer.canvas.height;
                 const mCtx = maskedFiltered.getContext('2d');
                 
-                mCtx.drawImage(tempC, 0, 0); // Draw filtered
+                mCtx.drawImage(tempC, 0, 0); 
                 mCtx.globalCompositeOperation = 'destination-in';
-                mCtx.drawImage(App.State.selection.mask, 0, 0); // Keep only selected area
+                mCtx.drawImage(project.selection.mask, 0, 0); 
                 
-                // C. Draw masked filtered over original
                 ctx.drawImage(maskedFiltered, 0, 0);
             } else {
-                // No selection, apply globally
                 ctx.drawImage(tempC, 0, 0);
             }
             
@@ -1071,7 +1152,6 @@ const App = {
         },
 
         processPixels(imgData, f) {
-            // ... existing pixel logic ...
             const d = imgData.data;
             const w = imgData.width; const h = imgData.height;
             const cx = w/2, cy = h/2;
@@ -1137,7 +1217,7 @@ const App = {
             reader.onload = (e) => {
                 if (file.type === 'application/pdf') this.loadPDF(e.target.result);
                 else {
-                    this.loadImageSrc(e.target.result, file.name);
+                    this.createProjectFromSrc(e.target.result, file.name);
                     if(file.type === 'image/jpeg') this.readEXIF(file);
                 }
             };
@@ -1145,24 +1225,17 @@ const App = {
             else reader.readAsDataURL(file);
         },
 
-        loadImageSrc(src, name) {
+        createProjectFromSrc(src, name) {
             const img = new Image();
             img.onload = () => {
-                if(App.State.layers.length === 0) {
-                    App.State.width = img.width;
-                    App.State.height = img.height;
-                    App.State.filename = name;
-                    const canvas = document.getElementById('main-canvas');
-                    canvas.width = img.width; canvas.height = img.height;
-                    const overlay = document.getElementById('overlay-canvas');
-                    overlay.width = img.width; overlay.height = img.height;
-                    document.getElementById('resize-w').value = img.width;
-                    document.getElementById('resize-h').value = img.height;
-                    App.State.zoom = Math.min( (window.innerWidth-400)/img.width, (window.innerHeight-100)/img.height, 1);
-                }
-                App.Layers.addLayer(img, name);
-                App.UI.updateTransform();
-                App.UI.updateFilename(App.State.filename);
+                const project = new Project(img.width, img.height, name);
+                App.State.projects.push(project);
+                App.State.activeProjectIndex = App.State.projects.length - 1;
+                
+                // Add Image Layer
+                App.Layers.addLayer(img, "Background");
+                
+                App.UI.renderTabs();
                 App.UI.setBusy(false);
                 document.getElementById('btn-compare').disabled = false;
             };
@@ -1174,42 +1247,22 @@ const App = {
             const h = parseInt(document.getElementById('new-height').value) || 600;
             const bg = document.getElementById('new-bg').value;
 
-            // Reset State
-            App.State.layers = [];
-            App.State.history = [];
-            App.State.historyIndex = -1;
-            App.State.width = w;
-            App.State.height = h;
-            App.State.filename = "untitled";
-            App.State.layerCounter = 0;
-
-            const main = document.getElementById('main-canvas');
-            main.width = w; main.height = h;
-            const ov = document.getElementById('overlay-canvas');
-            ov.width = w; ov.height = h;
-
-            document.getElementById('resize-w').value = w;
-            document.getElementById('resize-h').value = h;
+            const project = new Project(w, h, "Untitled");
+            App.State.projects.push(project);
+            App.State.activeProjectIndex = App.State.projects.length - 1;
 
             // Create Background Layer
             const bgCvs = document.createElement('canvas');
             bgCvs.width = w; bgCvs.height = h;
             const ctx = bgCvs.getContext('2d');
             
-            if(bg === 'white') {
-                ctx.fillStyle = 'white';
-                ctx.fillRect(0,0,w,h);
-            } else if (bg === 'black') {
-                ctx.fillStyle = 'black';
-                ctx.fillRect(0,0,w,h);
-            }
-            // Transparent leaves it empty
+            if(bg === 'white') { ctx.fillStyle = 'white'; ctx.fillRect(0,0,w,h); } 
+            else if (bg === 'black') { ctx.fillStyle = 'black'; ctx.fillRect(0,0,w,h); }
 
             App.Layers.addLayer(bgCvs, "Background");
             
             App.UI.closeModal('new-image-modal');
-            App.State.zoom = Math.min((window.innerWidth-400)/w, (window.innerHeight-100)/h, 1);
-            App.UI.updateTransform();
+            App.UI.renderTabs();
         },
 
         readEXIF(file) {
@@ -1236,13 +1289,18 @@ const App = {
             const cvs = document.createElement('canvas');
             cvs.width = viewport.width; cvs.height = viewport.height;
             await page.render({ canvasContext: cvs.getContext('2d'), viewport }).promise;
-            this.loadImageSrc(cvs.toDataURL(), "document.pdf");
+            this.createProjectFromSrc(cvs.toDataURL(), "document.pdf");
         },
 
         executeSave() {
+            const project = App.getProject();
+            if(!project) return;
+
             const name = document.getElementById('save-name').value;
             const format = document.getElementById('save-format').value;
             const canvas = document.getElementById('main-canvas');
+            
+            // Re-render to ensure canvas is up to date
             App.Render.update();
             
             if (format === 'application/pdf') {
@@ -1268,7 +1326,6 @@ const App = {
             window.addEventListener('mousemove', e => this.handleMove(e));
             window.addEventListener('mouseup', e => this.handleUp(e));
             
-            // Copy Paste & Spacebar Binding
             window.addEventListener('keydown', e => {
                 if(e.code === 'Space') {
                     App.State.isSpacePressed = true;
@@ -1289,19 +1346,13 @@ const App = {
             });
 
             area.addEventListener('wheel', e => {
-                if(App.State.layers.length === 0) return;
+                const project = App.getProject();
+                if(!project) return;
                 e.preventDefault();
                 
-                // Pan Logic:
-                // Wheel -> Vertical Pan
-                // Shift+Wheel -> Horizontal Pan
-                const factor = 1.5; // Speed multiplier
-                
-                if(e.shiftKey) {
-                     App.State.pan.x -= e.deltaY * factor;
-                } else {
-                     App.State.pan.y -= e.deltaY * factor;
-                }
+                const factor = 1.5; 
+                if(e.shiftKey) { project.pan.x -= e.deltaY * factor; } 
+                else { project.pan.y -= e.deltaY * factor; }
                 
                 App.UI.updateTransform();
             }, { passive: false });
@@ -1315,7 +1366,8 @@ const App = {
         },
 
         handleDown(e) {
-            if(App.State.layers.length === 0) return;
+            const project = App.getProject();
+            if(!project) return;
             const tool = App.State.activeTool;
             const pos = this.getImgPos(e);
 
@@ -1333,7 +1385,6 @@ const App = {
                 return;
             }
 
-            // Hand Tool (Explicit Pan)
             if(tool === 'hand') {
                 App.State.isDragging = true;
                 App.State.lastMouse = { x: e.clientX, y: e.clientY };
@@ -1345,13 +1396,11 @@ const App = {
             if(['rect', 'line', 'arrow', 'sel-rect', 'sel-oval', 'sel-lasso'].includes(tool)) {
                 App.State.isDrawing = true;
                 App.State.drawStart = pos;
-                if(tool === 'sel-lasso') App.State.selection.tempPath = [pos];
+                if(tool === 'sel-lasso') project.selection.tempPath = [pos];
                 return;
             }
             
-            if(tool === 'sel-wand') {
-                this.performMagicWand(pos);
-            }
+            if(tool === 'sel-wand') this.performMagicWand(pos);
 
             if(tool === 'paint' || tool === 'eraser') {
                 App.State.isDrawing = true;
@@ -1368,18 +1417,16 @@ const App = {
             if(tool === 'smudge') {
                 App.State.isDrawing = true;
                 App.State.lastMouse = pos;
-                // Smudge needs movement to work, so just set state on down
             }
 
             if(tool === 'clone') {
                 if(e.altKey) {
                     e.preventDefault();
-                    App.State.cloneSource = pos;
-                    App.State.cloneLayerId = App.State.activeLayerId;
-                    const ind = document.getElementById('clone-source-indicator');
-                    ind.style.display = 'block';
-                    ind.style.left = pos.rawX + 'px';
-                    ind.style.top = pos.rawY + 'px';
+                    // Clone source now needs project reference?
+                    // Let's assume clone source within same project for now, 
+                    // or implement a complex object for cross-project cloning later.
+                    App.State.cloneSource = { ...pos, projectId: project.id };
+                    // App.State.cloneLayerId = project.activeLayerId; // Removed per single-doc logic
                 } else if (App.State.cloneSource) {
                     App.State.isDrawing = true;
                     App.State.lastMouse = pos;
@@ -1390,28 +1437,23 @@ const App = {
         },
 
         handleMove(e) {
-            if(App.State.layers.length === 0) return;
+            const project = App.getProject();
+            if(!project) return;
             const tool = App.State.activeTool;
             const pos = this.getImgPos(e);
 
-            // Brush Cursor Visibility
             const cur = document.getElementById('clone-cursor');
             if(tool === 'clone' || tool === 'paint' || tool === 'eraser' || tool === 'smudge' || tool === 'sel-brush') {
                 cur.style.display = 'block';
-                cur.style.width = App.State.toolSettings.brushSize * App.State.zoom + 'px';
-                cur.style.height = App.State.toolSettings.brushSize * App.State.zoom + 'px';
+                cur.style.width = App.State.toolSettings.brushSize * project.zoom + 'px';
+                cur.style.height = App.State.toolSettings.brushSize * project.zoom + 'px';
                 cur.style.left = e.clientX - (parseFloat(cur.style.width)/2) + 'px';
                 cur.style.top = e.clientY - (parseFloat(cur.style.height)/2) + 'px';
                 
-                if(tool === 'eraser') {
-                    cur.style.borderColor = 'red'; cur.style.borderStyle = 'dashed';
-                } else if(tool === 'smudge') {
-                    cur.style.borderColor = 'cyan'; cur.style.borderStyle = 'solid';
-                } else if(tool === 'sel-brush') {
-                    cur.style.borderColor = '#6366f1'; cur.style.borderStyle = 'dashed';
-                } else {
-                    cur.style.borderColor = 'white'; cur.style.borderStyle = 'solid';
-                }
+                if(tool === 'eraser') { cur.style.borderColor = 'red'; cur.style.borderStyle = 'dashed'; }
+                else if(tool === 'smudge') { cur.style.borderColor = 'cyan'; cur.style.borderStyle = 'solid'; }
+                else if(tool === 'sel-brush') { cur.style.borderColor = '#6366f1'; cur.style.borderStyle = 'dashed'; }
+                else { cur.style.borderColor = 'white'; cur.style.borderStyle = 'solid'; }
             } else {
                 cur.style.display = 'none';
             }
@@ -1421,18 +1463,15 @@ const App = {
                 const dy = e.clientY - App.State.lastMouse.y;
                 
                 if(App.State.dragMode === 'pan') {
-                    App.State.pan.x += dx;
-                    App.State.pan.y += dy;
+                    project.pan.x += dx;
+                    project.pan.y += dy;
                     App.UI.updateTransform();
                 } else if (App.State.dragMode === 'layer') {
                     const layer = App.Layers.getActive();
-                    // Check if bottom layer (index length-1 because reversed rendering?)
-                    // Our layers array: 0 is TOP, length-1 is BOTTOM
-                    const isBase = App.State.layers.indexOf(layer) === App.State.layers.length - 1;
-                    
+                    const isBase = project.layers.indexOf(layer) === project.layers.length - 1;
                     if(layer && !isBase) {
-                        layer.x += dx / App.State.zoom;
-                        layer.y += dy / App.State.zoom;
+                        layer.x += dx / project.zoom;
+                        layer.y += dy / project.zoom;
                         App.Render.update();
                     }
                 }
@@ -1444,14 +1483,14 @@ const App = {
             if(App.State.isDrawing) {
                 const ctx = document.getElementById('overlay-canvas').getContext('2d');
                 ctx.clearRect(0,0, ctx.canvas.width, ctx.canvas.height);
-                if(App.State.selection.active) App.Render.update();
+                if(project.selection.active) App.Render.update();
 
                 if(['rect', 'line', 'arrow'].includes(tool)) this.drawShape(ctx, App.State.drawStart, pos, tool, true);
                 else if(tool === 'sel-rect') this.drawSelectionShape(ctx, App.State.drawStart, pos, 'rect');
                 else if(tool === 'sel-oval') this.drawSelectionShape(ctx, App.State.drawStart, pos, 'oval');
                 else if(tool === 'sel-lasso') {
-                    App.State.selection.tempPath.push(pos);
-                    this.drawSelectionLasso(ctx, App.State.selection.tempPath);
+                    project.selection.tempPath.push(pos);
+                    this.drawSelectionLasso(ctx, project.selection.tempPath);
                 }
                 else if (tool === 'paint' || tool === 'eraser') {
                     const last = App.State.lastMouse;
@@ -1488,16 +1527,15 @@ const App = {
                 else if (tool === 'smudge') {
                     let last = App.State.lastMouse;
                     const dist = Math.hypot(pos.x - last.x, pos.y - last.y);
-                    const step = Math.max(1, App.State.toolSettings.brushSize * 0.15); // Slightly larger step for performance
+                    const step = Math.max(1, App.State.toolSettings.brushSize * 0.15); 
                     if (dist > step) {
                         const steps = dist / step;
                         for (let i = 0; i < steps; i++) {
                             const t = i / steps;
                             const x = last.x + (pos.x - last.x) * t;
                             const y = last.y + (pos.y - last.y) * t;
-                            // Smudge from 'last' to 'current interpolated'
                             this.paintSmudge(last, {x, y});
-                            last = {x, y}; // Update tracker
+                            last = {x, y}; 
                         }
                     }
                     this.paintSmudge(last, pos);
@@ -1523,6 +1561,8 @@ const App = {
         },
 
         handleUp(e) {
+            const project = App.getProject();
+            if(!project) return;
             App.State.isDragging = false;
             document.getElementById('canvas-area').style.cursor = '';
             
@@ -1546,7 +1586,7 @@ const App = {
                 }
                 else if(tool === 'sel-rect') this.createSelectionMask('rect', App.State.drawStart, pos);
                 else if(tool === 'sel-oval') this.createSelectionMask('oval', App.State.drawStart, pos);
-                else if(tool === 'sel-lasso') this.createSelectionMask('lasso', null, null, App.State.selection.tempPath);
+                else if(tool === 'sel-lasso') this.createSelectionMask('lasso', null, null, project.selection.tempPath);
                 else if (tool === 'clone' || tool === 'paint' || tool === 'eraser' || tool === 'smudge') {
                     const layer = App.Layers.getActive();
                     if(layer) App.Filters.renderLayer(layer);
@@ -1562,27 +1602,25 @@ const App = {
         // ... existing helpers ...
         
         paintSelectionBrush(pos) {
-            // Ensure mask exists
-            if (!App.State.selection.active || !App.State.selection.mask) {
+            const project = App.getProject();
+            if (!project.selection.active || !project.selection.mask) {
                 const mask = document.createElement('canvas');
-                mask.width = App.State.width;
-                mask.height = App.State.height;
-                App.State.selection = { active: true, mask: mask, type: 'brush' };
+                mask.width = project.width;
+                mask.height = project.height;
+                project.selection = { active: true, mask: mask, type: 'brush' };
             }
             
-            const ctx = App.State.selection.mask.getContext('2d');
+            const ctx = project.selection.mask.getContext('2d');
             const settings = App.State.toolSettings;
             const size = settings.brushSize;
             const hardness = settings.brushHardness;
             const rad = size / 2;
 
-            // Brush tip
             const brush = document.createElement('canvas');
             brush.width = size; brush.height = size;
             const bCtx = brush.getContext('2d');
             
             const gradient = bCtx.createRadialGradient(rad, rad, rad * (hardness / 100), rad, rad, rad);
-            // Use opacity setting for selection strength (white alpha)
             const alpha = settings.brushOpacity / 100;
             gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
             gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
@@ -1591,7 +1629,7 @@ const App = {
             bCtx.fillRect(0, 0, size, size);
             
             ctx.save();
-            ctx.globalCompositeOperation = 'source-over'; // Add to selection
+            ctx.globalCompositeOperation = 'source-over'; 
             ctx.drawImage(brush, pos.x - rad, pos.y - rad);
             ctx.restore();
             
@@ -1600,7 +1638,8 @@ const App = {
 
         paintSmudge(fromPos, toPos) {
             const layer = App.Layers.getActive();
-            if(!layer) return;
+            const project = App.getProject();
+            if(!layer || !project) return;
 
             const ctx = layer.canvas.getContext('2d');
             const oCtx = layer.originalCanvas.getContext('2d');
@@ -1608,16 +1647,11 @@ const App = {
             const size = settings.brushSize;
             const rad = size / 2;
             
-            // 1. Capture pixels from the START position (the "finger" touches here)
-            // We grab from the visual canvas (layer.canvas) to include current edits
             const brushSource = document.createElement('canvas');
             brushSource.width = size; brushSource.height = size;
             const sCtx = brushSource.getContext('2d');
-            
-            // Draw layer content into brush source (relative to fromPos)
             sCtx.drawImage(layer.canvas, fromPos.x - rad, fromPos.y - rad, size, size, 0, 0, size, size);
 
-            // 2. Apply Hardness (Alpha Mask) to the captured source
             sCtx.globalCompositeOperation = 'destination-in';
             const gradient = sCtx.createRadialGradient(rad, rad, rad * (settings.brushHardness/100), rad, rad, rad);
             gradient.addColorStop(0, 'rgba(0,0,0,1)'); 
@@ -1625,22 +1659,18 @@ const App = {
             sCtx.fillStyle = gradient;
             sCtx.fillRect(0, 0, size, size);
 
-            // 3. Draw the captured "smudge" onto the DESTINATION position
-            // This creates the dragging effect. We draw with low opacity to blend.
             const paintOp = (targetCtx) => {
                 targetCtx.save();
-                targetCtx.globalAlpha = settings.brushOpacity / 100; // Strength
+                targetCtx.globalAlpha = settings.brushOpacity / 100; 
                 
-                // If selection exists, mask the drawing area
-                if(App.State.selection.active && App.State.selection.mask) {
+                if(project.selection.active && project.selection.mask) {
                     const temp = document.createElement('canvas');
                     temp.width = size; temp.height = size;
                     const t = temp.getContext('2d');
                     
                     t.drawImage(brushSource, 0, 0);
                     t.globalCompositeOperation = 'destination-in';
-                    // Mask relative to destination
-                    t.drawImage(App.State.selection.mask, -(toPos.x - rad), -(toPos.y - rad));
+                    t.drawImage(project.selection.mask, -(toPos.x - rad), -(toPos.y - rad));
                     
                     targetCtx.drawImage(temp, toPos.x - rad, toPos.y - rad);
                 } else {
@@ -1657,7 +1687,8 @@ const App = {
 
         paintBrush(destPos) {
             const layer = App.Layers.getActive();
-            if(!layer) return;
+            const project = App.getProject();
+            if(!layer || !project) return;
 
             const ctx = layer.canvas.getContext('2d');
             const oCtx = layer.originalCanvas.getContext('2d');
@@ -1667,7 +1698,6 @@ const App = {
             const color = settings.drawColor;
             const isEraser = App.State.activeTool === 'eraser';
 
-            // Create Brush Tip (Radial Gradient)
             const brushCvs = document.createElement('canvas');
             brushCvs.width = size; brushCvs.height = size;
             const bCtx = brushCvs.getContext('2d');
@@ -1683,18 +1713,16 @@ const App = {
             bCtx.fillStyle = gradient;
             bCtx.fillRect(0, 0, size, size);
 
-            // Helper to draw with mask
             const drawTo = (targetCtx) => {
-                if(App.State.selection.active && App.State.selection.mask) {
+                if(project.selection.active && project.selection.mask) {
                     const temp = document.createElement('canvas');
                     temp.width = size; temp.height = size;
                     const t = temp.getContext('2d');
                     t.drawImage(brushCvs, 0, 0);
                     t.globalCompositeOperation = 'destination-in';
-                    t.drawImage(App.State.selection.mask, -(destPos.x - rad), -(destPos.y - rad));
+                    t.drawImage(project.selection.mask, -(destPos.x - rad), -(destPos.y - rad));
                     
                     targetCtx.save();
-                    // If erasing, use destination-out
                     if(isEraser) targetCtx.globalCompositeOperation = 'destination-out';
                     targetCtx.globalAlpha = settings.brushOpacity / 100;
                     targetCtx.drawImage(temp, destPos.x - rad, destPos.y - rad);
@@ -1715,15 +1743,16 @@ const App = {
         },
 
         applyDrawToLayer(layer, drawFn) {
+            const project = App.getProject();
             const ctx = layer.canvas.getContext('2d');
             const oCtx = layer.originalCanvas.getContext('2d');
-            if(App.State.selection.active && App.State.selection.mask) {
+            if(project.selection.active && project.selection.mask) {
                 const temp = document.createElement('canvas');
                 temp.width = layer.canvas.width; temp.height = layer.canvas.height;
                 const tCtx = temp.getContext('2d');
                 drawFn(tCtx); 
                 tCtx.globalCompositeOperation = 'destination-in';
-                tCtx.drawImage(App.State.selection.mask, 0, 0);
+                tCtx.drawImage(project.selection.mask, 0, 0);
                 ctx.drawImage(temp, 0, 0);
                 oCtx.drawImage(temp, 0, 0);
             } else {
@@ -1776,8 +1805,10 @@ const App = {
         },
 
         createSelectionMask(type, start, end, path) {
+            const project = App.getProject();
+            if(!project) return;
             const mask = document.createElement('canvas');
-            mask.width = App.State.width; mask.height = App.State.height;
+            mask.width = project.width; mask.height = project.height;
             const ctx = mask.getContext('2d');
             ctx.fillStyle = 'white'; ctx.beginPath();
             let pathFunc = null;
@@ -1799,22 +1830,23 @@ const App = {
                 pathFunc = (c) => { c.moveTo(path[0].x, path[0].y); for(let i=1; i<path.length; i++) c.lineTo(path[i].x, path[i].y); c.closePath(); }
             }
             ctx.fill();
-            App.State.selection = { active: true, mask: mask, type: type, pathFunc: pathFunc };
+            project.selection = { active: true, mask: mask, type: type, pathFunc: pathFunc };
             App.Render.update();
         },
 
         performMagicWand(pos) {
             const layer = App.Layers.getActive();
-            if(!layer) return;
+            const project = App.getProject();
+            if(!layer || !project) return;
             const ctx = layer.canvas.getContext('2d');
-            const w = layer.canvas.width; const h = layer.canvas.height;
+            const w = project.width; const h = project.height;
             const imgData = ctx.getImageData(0, 0, w, h);
             const data = imgData.data;
             const tx = Math.floor(pos.x); const ty = Math.floor(pos.y);
             if(tx<0||tx>=w||ty<0||ty>=h) return;
             const ti = (ty*w + tx)*4;
             const tr=data[ti], tg=data[ti+1], tb=data[ti+2], ta=data[ti+3];
-            const tol = App.State.selection.wandTolerance || 30;
+            const tol = project.selection.wandTolerance || 30;
             const mask = document.createElement('canvas');
             mask.width = w; mask.height = h;
             const mCtx = mask.getContext('2d');
@@ -1838,39 +1870,43 @@ const App = {
                 }
             }
             mCtx.putImageData(mData, 0, 0);
-            App.State.selection = { active: true, mask: mask, type: 'wand' };
+            project.selection = { active: true, mask: mask, type: 'wand' };
             App.Render.update();
         },
 
         invertSelection() {
-            if(!App.State.selection.active || !App.State.selection.mask) return;
-            const ctx = App.State.selection.mask.getContext('2d');
+            const project = App.getProject();
+            if(!project || !project.selection.active || !project.selection.mask) return;
+            const ctx = project.selection.mask.getContext('2d');
             ctx.globalCompositeOperation = 'source-out';
             ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, App.State.width, App.State.height);
-            App.State.selection.pathFunc = null;
+            ctx.fillRect(0, 0, project.width, project.height);
+            project.selection.pathFunc = null;
             App.Render.update();
         },
 
         clearSelection() {
-            App.State.selection = { active: false, mask: null, type: null };
-            App.Render.update();
+            const project = App.getProject();
+            if(project) {
+                project.selection = { active: false, mask: null, type: null };
+                App.Render.update();
+            }
         },
 
         copySelection() {
             const layer = App.Layers.getActive();
-            if(!layer) return;
+            const project = App.getProject();
+            if(!layer || !project) return;
             const temp = document.createElement('canvas');
-            temp.width = App.State.width; temp.height = App.State.height;
+            temp.width = project.width; temp.height = project.height;
             const ctx = temp.getContext('2d');
             ctx.drawImage(layer.canvas, 0, 0);
-            if(App.State.selection.active && App.State.selection.mask) {
+            if(project.selection.active && project.selection.mask) {
                 ctx.globalCompositeOperation = 'destination-in';
-                ctx.drawImage(App.State.selection.mask, 0, 0);
+                ctx.drawImage(project.selection.mask, 0, 0);
             }
             App.State.clipboard = temp;
-            const btn = document.getElementById('btn-copy');
-            if(btn) { const orig = btn.innerHTML; btn.innerHTML = '<i class="ph ph-check"></i>'; setTimeout(()=> btn.innerHTML = orig, 1000); }
+            // Removed visual feedback button as button is in menu now
         },
 
         pasteSelection() {
@@ -1879,11 +1915,15 @@ const App = {
         },
 
         paintClone(destPos) {
-            // ... clone logic respecting mask ...
             const layer = App.Layers.getActive();
-            if(!layer || !App.State.cloneOffset) return;
-            const sourceLayer = App.State.layers.find(l => l.id === App.State.cloneLayerId);
+            const project = App.getProject();
+            if(!layer || !App.State.cloneOffset || !project) return;
+            
+            // For now, clone only works within same project. 
+            // In future, we could look up project by ID if stored in cloneSource.
+            const sourceLayer = project.layers.find(l => l.id === App.State.cloneLayerId);
             if(!sourceLayer) return;
+
             const ctx = layer.canvas.getContext('2d');
             const oCtx = layer.originalCanvas.getContext('2d');
             const settings = App.State.toolSettings;
@@ -1893,7 +1933,14 @@ const App = {
             const srcY = destPos.y - App.State.cloneOffset.y;
             
             const ind = document.getElementById('clone-source-indicator');
-            if(ind) { ind.style.left = (document.getElementById('main-canvas').getBoundingClientRect().left + srcX * (document.getElementById('main-canvas').getBoundingClientRect().width / document.getElementById('main-canvas').width)) + 'px'; ind.style.top = (document.getElementById('main-canvas').getBoundingClientRect().top + srcY * (document.getElementById('main-canvas').getBoundingClientRect().height / document.getElementById('main-canvas').height)) + 'px'; }
+            if(ind) { 
+                const canvas = document.getElementById('main-canvas');
+                const rect = canvas.getBoundingClientRect();
+                const ratioX = rect.width / canvas.width;
+                const ratioY = rect.height / canvas.height;
+                ind.style.left = (rect.left + srcX * ratioX) + 'px';
+                ind.style.top = (rect.top + srcY * ratioY) + 'px';
+            }
 
             const brushCvsVis = document.createElement('canvas'); brushCvsVis.width = size; brushCvsVis.height = size; const bCtxVis = brushCvsVis.getContext('2d');
             bCtxVis.drawImage(sourceLayer.canvas, srcX - rad, srcY - rad, size, size, 0, 0, size, size);
@@ -1905,11 +1952,11 @@ const App = {
             [bCtxVis, bCtxRaw].forEach(c => { c.globalCompositeOperation = 'destination-in'; c.fillStyle = gradient; c.fillRect(0, 0, size, size); });
 
             const applyWithMask = (targetCtx, brush) => {
-                if(App.State.selection.active && App.State.selection.mask) {
+                if(project.selection.active && project.selection.mask) {
                     const temp = document.createElement('canvas'); temp.width = size; temp.height = size; const t = temp.getContext('2d');
                     t.drawImage(brush, 0, 0);
                     t.globalCompositeOperation = 'destination-in';
-                    t.drawImage(App.State.selection.mask, -(destPos.x - rad), -(destPos.y - rad));
+                    t.drawImage(project.selection.mask, -(destPos.x - rad), -(destPos.y - rad));
                     targetCtx.save(); targetCtx.globalAlpha = settings.brushOpacity / 100; targetCtx.drawImage(temp, destPos.x - rad, destPos.y - rad); targetCtx.restore();
                 } else {
                     targetCtx.save(); targetCtx.globalAlpha = settings.brushOpacity / 100; targetCtx.drawImage(brush, destPos.x - rad, destPos.y - rad); targetCtx.restore();
@@ -1931,10 +1978,6 @@ const App = {
             document.querySelectorAll('.tool-btn[data-tool]').forEach(b => {
                 b.addEventListener('click', () => this.selectTool(b.dataset.tool));
             });
-
-            // REMOVE THESE LINES
-            // document.getElementById('btn-undo').addEventListener('click', () => App.History.undo());
-            // document.getElementById('btn-redo').addEventListener('click', () => App.History.redo());
 
             document.querySelectorAll('button[data-cmd]').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -1989,6 +2032,59 @@ const App = {
                 document.querySelectorAll('.dropdown').forEach(d => d.classList.remove('open'));
             });
         },
+        
+        renderTabs() {
+            const container = document.getElementById('tabs-bar');
+            container.innerHTML = '';
+            
+            App.State.projects.forEach((proj, index) => {
+                const tab = document.createElement('div');
+                tab.className = `tab ${index === App.State.activeProjectIndex ? 'active' : ''}`;
+                tab.onclick = () => App.UI.switchTab(index);
+                
+                tab.innerHTML = `
+                    <span class="tab-name">${proj.name}</span>
+                    <i class="ph ph-x tab-close" onclick="App.UI.closeTab(${index}, event)"></i>
+                `;
+                container.appendChild(tab);
+            });
+            
+            // Sync UI parts for the newly active project
+            App.UI.renderLayerList();
+            App.UI.syncControls();
+            App.Render.update();
+            
+            // Update zoom slider if tool is zoom
+            const zSlider = document.getElementById('opt-zoom');
+            if(zSlider) {
+                const project = App.getProject();
+                if(project) {
+                    const z = Math.round(project.zoom * 100);
+                    zSlider.value = z;
+                    document.getElementById('lbl-zoom').innerText = z + "%";
+                }
+            }
+        },
+        
+        switchTab(index) {
+            App.State.activeProjectIndex = index;
+            App.UI.renderTabs();
+        },
+        
+        closeTab(index, e) {
+            e.stopPropagation();
+            App.State.projects.splice(index, 1);
+            if(App.State.activeProjectIndex >= App.State.projects.length) {
+                App.State.activeProjectIndex = Math.max(0, App.State.projects.length - 1);
+            }
+            App.UI.renderTabs();
+            // If no projects left, clear canvas
+            if(App.State.projects.length === 0) {
+                 const ctx = document.getElementById('main-canvas').getContext('2d');
+                 ctx.clearRect(0,0,ctx.canvas.width, ctx.canvas.height);
+                 document.getElementById('layers-container').innerHTML = '';
+            }
+        },
 
         openNewModal() {
             document.getElementById('new-image-modal').classList.add('open');
@@ -1999,21 +2095,23 @@ const App = {
         },
 
         openSaveModal() {
-            if(App.State.layers.length === 0) return;
-            document.getElementById('save-name').value = App.State.filename.replace(/\.[^/.]+$/, "") + "-edit";
+            if(App.State.projects.length === 0) return;
+            const project = App.getProject();
+            document.getElementById('save-name').value = project.name.replace(/\.[^/.]+$/, "") + "-edit";
             document.getElementById('save-modal').classList.add('open');
         },
 
         openRotateModal() {
-            if(App.State.layers.length === 0) return;
+            if(App.State.projects.length === 0) return;
             document.getElementById('custom-rot-val').value = 0;
             document.getElementById('rotate-modal').classList.add('open');
         },
 
         openResizeModal() {
-            if(App.State.layers.length === 0) return;
-            document.getElementById('resize-w').value = App.State.width;
-            document.getElementById('resize-h').value = App.State.height;
+            const project = App.getProject();
+            if(!project) return;
+            document.getElementById('resize-w').value = project.width;
+            document.getElementById('resize-h').value = project.height;
             document.getElementById('resize-modal').classList.add('open');
         },
 
@@ -2103,16 +2201,6 @@ const App = {
                     <div class="control-group"><div class="control-label"><span>Opacity</span> <span id="lbl-bopac">${App.State.toolSettings.brushOpacity}%</span></div><input type="range" id="opt-brush-opac" value="${App.State.toolSettings.brushOpacity}" min="1" max="100"></div>
                     <div style="font-size:11px; color:#888;">Hold Alt + Click to set source.</div>
                 `;
-            } else if (tool === 'sel-brush') {
-                html += `
-                    <div class="control-group"><div class="control-label"><span>Size</span> <span id="lbl-bsize">${App.State.toolSettings.brushSize}px</span></div><input type="range" id="opt-brush-size" value="${App.State.toolSettings.brushSize}" min="5" max="999"></div>
-                    <div class="control-group"><div class="control-label"><span>Hardness</span> <span id="lbl-bhard">${App.State.toolSettings.brushHardness}%</span></div><input type="range" id="opt-brush-hard" value="${App.State.toolSettings.brushHardness}" min="0" max="100"></div>
-                    <div class="control-group"><div class="control-label"><span>Opacity (Strength)</span> <span id="lbl-bopac">${App.State.toolSettings.brushOpacity}%</span></div><input type="range" id="opt-brush-opac" value="${App.State.toolSettings.brushOpacity}" min="1" max="100"></div>
-                    <div class="btn-grid" style="margin-top:10px;">
-                        <button class="btn" onclick="App.Tools.invertSelection()"><i class="ph ph-swap"></i> Invert</button>
-                        <button class="btn" onclick="App.Tools.clearSelection()"><i class="ph ph-x"></i> Deselect</button>
-                    </div>
-                `;
             } else if (['sel-rect', 'sel-oval', 'sel-lasso', 'sel-wand'].includes(tool)) {
                 // Removed Copy/Paste buttons as they are now in the Edit menu
                 if(tool === 'sel-wand') {
@@ -2124,7 +2212,8 @@ const App = {
                 html += `<button class="btn btn-primary" onclick="App.UI.applyCrop()">Apply Crop</button>`;
             } else if (tool === 'zoom') {
                 // Zoom Slider Logic
-                const currentZoom = Math.round(App.State.zoom * 100);
+                const project = App.getProject();
+                const currentZoom = project ? Math.round(project.zoom * 100) : 100;
                 html += `
                     <div class="control-group">
                         <div class="control-label"><span>Zoom Level</span> <span id="lbl-zoom">${currentZoom}%</span></div>
@@ -2146,15 +2235,23 @@ const App = {
              const bopac = document.getElementById('opt-brush-opac');
             if(bopac) bopac.addEventListener('input', e => { App.State.toolSettings.brushOpacity = parseInt(e.target.value); document.getElementById('lbl-bopac').innerText = e.target.value + "%"; });
             const tol = document.getElementById('opt-tol');
-            if(tol) tol.addEventListener('input', e => { App.State.selection.wandTolerance = parseInt(e.target.value); document.getElementById('lbl-tol').innerText = e.target.value; });
+            if(tol) tol.addEventListener('input', e => { 
+                const project = App.getProject();
+                if(project) {
+                    project.selection.wandTolerance = parseInt(e.target.value); 
+                    document.getElementById('lbl-tol').innerText = e.target.value; 
+                }
+            });
             
             // Zoom Slider Listener
             const zSlider = document.getElementById('opt-zoom');
             if(zSlider) {
                 zSlider.addEventListener('input', e => {
+                    const project = App.getProject();
+                    if(!project) return;
                     const val = parseInt(e.target.value);
                     document.getElementById('lbl-zoom').innerText = val + "%";
-                    App.State.zoom = val / 100;
+                    project.zoom = val / 100;
                     App.UI.updateTransform();
                 });
             }
@@ -2163,9 +2260,13 @@ const App = {
         renderLayerList() {
             const container = document.getElementById('layers-container');
             container.innerHTML = '';
-            App.State.layers.forEach(layer => {
+            
+            const project = App.getProject();
+            if(!project) return;
+            
+            project.layers.forEach(layer => {
                 const div = document.createElement('div');
-                div.className = `layer-item ${layer.id === App.State.activeLayerId ? 'active' : ''}`;
+                div.className = `layer-item ${layer.id === project.activeLayerId ? 'active' : ''}`;
                 div.onclick = () => App.Layers.setActive(layer.id);
                 
                 const thumb = document.createElement('canvas');
@@ -2196,20 +2297,21 @@ const App = {
 
         transformLayer(type, val) {
             const layer = App.Layers.getActive();
-            if(!layer) return;
+            const project = App.getProject();
+            if(!layer || !project) return;
             
             const applyTransform = (cvs) => {
                 const tempCvs = document.createElement('canvas');
-                tempCvs.width = App.State.width; tempCvs.height = App.State.height;
+                tempCvs.width = project.width; tempCvs.height = project.height;
                 const ctx = tempCvs.getContext('2d');
                 
                 if(type === 'rotate') {
                     const rad = val * Math.PI / 180;
-                    ctx.translate(App.State.width/2, App.State.height/2);
+                    ctx.translate(project.width/2, project.height/2);
                     ctx.rotate(rad);
-                    ctx.drawImage(cvs, -App.State.width/2, -App.State.height/2);
+                    ctx.drawImage(cvs, -project.width/2, -project.height/2);
                 } else if (type === 'flip') {
-                    ctx.translate(val==='h'?App.State.width:0, val==='v'?App.State.height:0);
+                    ctx.translate(val==='h'?project.width:0, val==='v'?project.height:0);
                     ctx.scale(val==='h'?-1:1, val==='v'?-1:1);
                     ctx.drawImage(cvs, 0, 0);
                 }
@@ -2234,12 +2336,13 @@ const App = {
         },
 
         applyCrop() {
-            if(App.State.cropper) {
+            const project = App.getProject();
+            if(App.State.cropper && project) {
                 const data = App.State.cropper.getData();
-                App.State.width = Math.round(data.width);
-                App.State.height = Math.round(data.height);
+                project.width = Math.round(data.width);
+                project.height = Math.round(data.height);
                 
-                App.State.layers.forEach(layer => {
+                project.layers.forEach(layer => {
                     const t1 = document.createElement('canvas'); t1.width = data.width; t1.height = data.height;
                     t1.getContext('2d').drawImage(layer.canvas, -data.x, -data.y);
                     layer.canvas = t1;
@@ -2261,12 +2364,13 @@ const App = {
         },
         
         applyResize() {
+            const project = App.getProject();
             const w = parseInt(document.getElementById('resize-w').value);
             const h = parseInt(document.getElementById('resize-h').value);
-            if(!w || !h) return;
-            App.State.width = w; App.State.height = h;
+            if(!w || !h || !project) return;
+            project.width = w; project.height = h;
             
-            App.State.layers.forEach(layer => {
+            project.layers.forEach(layer => {
                 const t1 = document.createElement('canvas'); t1.width = w; t1.height = h;
                 t1.getContext('2d').drawImage(layer.canvas, 0, 0, w, h);
                 layer.canvas = t1;
@@ -2285,8 +2389,10 @@ const App = {
         },
 
         updateTransform() {
+            const project = App.getProject();
+            if(!project) return;
             const el = document.getElementById('canvas-wrapper');
-            el.style.transform = `translate(${App.State.pan.x}px, ${App.State.pan.y}px) scale(${App.State.zoom})`;
+            el.style.transform = `translate(${project.pan.x}px, ${project.pan.y}px) scale(${project.zoom})`;
         },
 
         updateFilename(name) { document.getElementById('filename-display').innerText = name; },
@@ -2300,36 +2406,41 @@ const App = {
     // --- HISTORY ---
     History: {
         push() {
-            const stateSnapshot = App.State.layers.map(l => ({
+            const project = App.getProject();
+            if(!project) return;
+
+            const stateSnapshot = project.layers.map(l => ({
                 ...l,
                 dataURL: l.canvas.toDataURL(),
                 originalDataURL: l.originalCanvas.toDataURL(),
                 filters: {...l.filters}
             }));
             
-            const globalState = {
+            const state = {
                 layers: stateSnapshot,
-                width: App.State.width,
-                height: App.State.height,
-                activeLayerId: App.State.activeLayerId
+                width: project.width,
+                height: project.height,
+                activeLayerId: project.activeLayerId
             };
 
-            if(App.State.history.length > 10) App.State.history.shift();
-            App.State.history = App.State.history.slice(0, App.State.historyIndex + 1);
-            App.State.history.push(globalState);
-            App.State.historyIndex = App.State.history.length - 1;
-            // Removed toggleHistoryBtns call
+            if(project.history.length > 10) project.history.shift();
+            project.history = project.history.slice(0, project.historyIndex + 1);
+            project.history.push(state);
+            project.historyIndex = project.history.length - 1;
         },
         
         restore(state) {
-            App.State.width = state.width;
-            App.State.height = state.height;
-            App.State.activeLayerId = state.activeLayerId;
+            const project = App.getProject();
+            if(!project) return;
+            
+            project.width = state.width;
+            project.height = state.height;
+            project.activeLayerId = state.activeLayerId;
             
             const main = document.getElementById('main-canvas'); main.width = state.width; main.height = state.height;
             const ov = document.getElementById('overlay-canvas'); ov.width = state.width; ov.height = state.height;
             
-            App.State.layers = [];
+            project.layers = [];
             let loaded = 0;
             if(state.layers.length === 0) { App.Render.update(); return; }
 
@@ -2344,7 +2455,7 @@ const App = {
                         const oCvs = document.createElement('canvas'); oCvs.width = state.width; oCvs.height = state.height;
                         oCvs.getContext('2d').drawImage(origImg, 0, 0);
 
-                        App.State.layers.push({
+                        project.layers.push({
                             id: l.id, name: l.name, canvas: cvs, originalCanvas: oCvs,
                             visible: l.visible, opacity: l.opacity, blendMode: l.blendMode,
                             filters: l.filters, x: l.x, y: l.y
@@ -2352,7 +2463,7 @@ const App = {
                         
                         loaded++;
                         if(loaded === state.layers.length) {
-                            App.State.layers.sort((a,b) => {
+                            project.layers.sort((a,b) => {
                                 const idxA = state.layers.findIndex(sl => sl.id === a.id);
                                 const idxB = state.layers.findIndex(sl => sl.id === b.id);
                                 return idxA - idxB;
@@ -2368,15 +2479,17 @@ const App = {
         },
 
         undo() {
-            if(App.State.historyIndex > 0) {
-                App.State.historyIndex--;
-                this.restore(App.State.history[App.State.historyIndex]);
+            const project = App.getProject();
+            if(project && project.historyIndex > 0) {
+                project.historyIndex--;
+                this.restore(project.history[project.historyIndex]);
             }
         },
         redo() {
-            if(App.State.historyIndex < App.State.history.length - 1) {
-                App.State.historyIndex++;
-                this.restore(App.State.history[App.State.historyIndex]);
+            const project = App.getProject();
+            if(project && project.historyIndex < project.history.length - 1) {
+                project.historyIndex++;
+                this.restore(project.history[project.historyIndex]);
             }
         }
     }
