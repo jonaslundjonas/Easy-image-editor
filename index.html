@@ -831,6 +831,7 @@ const App = {
                 filters: this.getDefaultFilters(),
                 x: startX, y: startY,
                 width: width, height: height, // Display size
+                rotation: 0,
                 type: 'raster'
             };
 
@@ -858,6 +859,7 @@ const App = {
                 filters: this.getDefaultFilters(),
                 x: x, y: y,
                 width: 0, height: 0,
+                rotation: 0,
                 type: 'text',
                 textProps: { ...config } // Clone props
             };
@@ -1067,8 +1069,13 @@ const App = {
                 ctx.save();
                 ctx.globalAlpha = layer.opacity / 100;
                 ctx.globalCompositeOperation = layer.blendMode;
-                // Draw scaled
-                ctx.drawImage(layer.canvas, 0, 0, layer.canvas.width, layer.canvas.height, layer.x, layer.y, layer.width, layer.height);
+
+                const cx = layer.x + layer.width / 2;
+                const cy = layer.y + layer.height / 2;
+                ctx.translate(cx, cy);
+                ctx.rotate((layer.rotation || 0) * Math.PI / 180);
+
+                ctx.drawImage(layer.canvas, 0, 0, layer.canvas.width, layer.canvas.height, -layer.width/2, -layer.height/2, layer.width, layer.height);
                 ctx.restore();
             });
 
@@ -1110,29 +1117,57 @@ const App = {
         },
 
         drawHandles(ctx, layer) {
-            const x = layer.x;
-            const y = layer.y;
             const w = layer.width;
             const h = layer.height;
-            const size = 8; // Handle size
+            const cx = layer.x + w/2;
+            const cy = layer.y + h/2;
+            const size = 8;
+
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate((layer.rotation || 0) * Math.PI / 180);
 
             ctx.strokeStyle = '#6366f1';
             ctx.lineWidth = 1;
-            ctx.strokeRect(x, y, w, h);
+            ctx.strokeRect(-w/2, -h/2, w, h);
+
+            // Rotation handle line
+            ctx.beginPath();
+            ctx.moveTo(0, -h/2);
+            ctx.lineTo(0, -h/2 - 25);
+            ctx.stroke();
 
             const handles = [
-                {x: x, y: y, name: 'tl'},
-                {x: x + w, y: y, name: 'tr'},
-                {x: x, y: y + h, name: 'bl'},
-                {x: x + w, y: y + h, name: 'br'}
+                {x: -w/2, y: -h/2, name: 'tl'},
+                {x: w/2, y: -h/2, name: 'tr'},
+                {x: -w/2, y: h/2, name: 'bl'},
+                {x: w/2, y: h/2, name: 'br'},
+
+                // Edge handles
+                {x: 0, y: -h/2, name: 'tm'},
+                {x: 0, y: h/2, name: 'bm'},
+                {x: -w/2, y: 0, name: 'lm'},
+                {x: w/2, y: 0, name: 'rm'},
+
+                // Rotation handle
+                {x: 0, y: -h/2 - 25, name: 'rot'}
             ];
 
             ctx.fillStyle = 'white';
             ctx.strokeStyle = '#6366f1';
+
             handles.forEach(h => {
-                ctx.fillRect(h.x - size/2, h.y - size/2, size, size);
-                ctx.strokeRect(h.x - size/2, h.y - size/2, size, size);
+                if(h.name === 'rot') {
+                     ctx.beginPath();
+                     ctx.arc(h.x, h.y, 5, 0, Math.PI*2);
+                     ctx.fill(); ctx.stroke();
+                } else {
+                    ctx.fillRect(h.x - size/2, h.y - size/2, size, size);
+                    ctx.strokeRect(h.x - size/2, h.y - size/2, size, size);
+                }
             });
+
+            ctx.restore();
         }
     },
 
@@ -1412,6 +1447,29 @@ const App = {
             return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY, rawX: e.clientX, rawY: e.clientY };
         },
 
+        toLocal(pos, layer) {
+             const cx = layer.x + layer.width/2;
+             const cy = layer.y + layer.height/2;
+             const angle = (layer.rotation || 0) * Math.PI / 180;
+             const dx = pos.x - cx;
+             const dy = pos.y - cy;
+
+             // Unrotate vector from center
+             const rDx = dx * Math.cos(-angle) - dy * Math.sin(-angle);
+             const rDy = dx * Math.sin(-angle) + dy * Math.cos(-angle);
+
+             // Convert to coords relative to Top-Left (0,0) of unrotated box
+             // Center is at w/2, h/2. So x = rDx + w/2
+             const lx = rDx + layer.width/2;
+             const ly = rDy + layer.height/2;
+
+             // Scale to raster dimensions
+             const sx = lx * (layer.canvas.width / layer.width);
+             const sy = ly * (layer.canvas.height / layer.height);
+
+             return { x: sx, y: sy };
+        },
+
         handleDoubleClick(e) {
             const project = App.getActiveProject();
             if(!project) return;
@@ -1441,15 +1499,37 @@ const App = {
         },
 
         getHandleUnderMouse(pos, layer) {
-            const size = 12; // Hit area
+            const size = 12;
+            const cx = layer.x + layer.width/2;
+            const cy = layer.y + layer.height/2;
+
+            // Transform global mouse to local unrotated space
+            const angle = (layer.rotation || 0) * Math.PI / 180;
+            const dx = pos.x - cx;
+            const dy = pos.y - cy;
+
+            const localX = dx * Math.cos(-angle) - dy * Math.sin(-angle);
+            const localY = dx * Math.sin(-angle) + dy * Math.cos(-angle);
+
+            // Coordinates relative to center
+            const w2 = layer.width / 2;
+            const h2 = layer.height / 2;
+
             const handles = [
-                {name: 'tl', x: layer.x, y: layer.y},
-                {name: 'tr', x: layer.x + layer.width, y: layer.y},
-                {name: 'bl', x: layer.x, y: layer.y + layer.height},
-                {name: 'br', x: layer.x + layer.width, y: layer.y + layer.height}
+                {name: 'tl', x: -w2, y: -h2},
+                {name: 'tr', x: w2, y: -h2},
+                {name: 'bl', x: -w2, y: h2},
+                {name: 'br', x: w2, y: h2},
+                {name: 'tm', x: 0, y: -h2},
+                {name: 'bm', x: 0, y: h2},
+                {name: 'lm', x: -w2, y: 0},
+                {name: 'rm', x: w2, y: 0},
+                {name: 'rot', x: 0, y: -h2 - 25}
             ];
+
             for (let h of handles) {
-                if (Math.abs(pos.x - h.x) < size && Math.abs(pos.y - h.y) < size) return h.name;
+                // Check distance in local space
+                if (Math.abs(localX - h.x) < size && Math.abs(localY - h.y) < size) return h.name;
             }
             return null;
         },
@@ -1466,9 +1546,9 @@ const App = {
                     const handle = this.getHandleUnderMouse(pos, layer);
                     if(handle) {
                         App.State.isDragging = true;
-                        App.State.dragMode = 'resize';
+                        App.State.dragMode = handle === 'rot' ? 'rotate' : 'resize';
                         App.State.activeHandle = handle;
-                        App.State.lastMouse = pos; // Use image pos for resize math
+                        App.State.lastMouse = pos;
                         return;
                     }
                 }
@@ -1510,7 +1590,7 @@ const App = {
             if(tool === 'paint' || tool === 'eraser' || tool === 'sel-brush' || tool === 'smudge') {
                 App.State.isDrawing = true;
                 App.State.lastMouse = pos;
-                if(tool === 'sel-brush') this.paintSelectionBrush(pos);
+                if(tool === 'sel-brush') this.paintSelectionBrush(pos, e.altKey);
                 else if(tool === 'smudge') {}
                 else this.paintBrush(pos);
             }
@@ -1565,16 +1645,83 @@ const App = {
             }
 
             if(App.State.isDragging) {
+                if (App.State.dragMode === 'rotate') {
+                     const layer = App.Layers.getActive();
+                     const cx = layer.x + layer.width/2;
+                     const cy = layer.y + layer.height/2;
+
+                     // Vector from center to mouse
+                     const dx = pos.x - cx;
+                     const dy = pos.y - cy;
+                     const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+                     // Handle is at top (-90). So rotation is angle + 90
+                     let rot = angle + 90;
+                     if(e.shiftKey) rot = Math.round(rot / 15) * 15;
+
+                     layer.rotation = rot;
+                     App.Render.update();
+                     return;
+                }
+
                 if (App.State.dragMode === 'resize') {
                     const layer = App.Layers.getActive();
-                    const dx = pos.x - App.State.lastMouse.x;
-                    const dy = pos.y - App.State.lastMouse.y;
+                    const angle = (layer.rotation || 0) * Math.PI / 180;
+
+                    // 1. Calculate Delta in Local Unrotated Space
+                    const gDx = pos.x - App.State.lastMouse.x;
+                    const gDy = pos.y - App.State.lastMouse.y;
+
+                    const dx = gDx * Math.cos(-angle) - gDy * Math.sin(-angle);
+                    const dy = gDx * Math.sin(-angle) + gDy * Math.cos(-angle);
+
                     const handle = App.State.activeHandle;
 
-                    if (handle.includes('r')) layer.width += dx;
-                    if (handle.includes('b')) layer.height += dy;
-                    if (handle.includes('l')) { layer.x += dx; layer.width -= dx; }
-                    if (handle.includes('t')) { layer.y += dy; layer.height -= dy; }
+                    // 2. Identify Anchor Ratios (0..1)
+                    // If handle is 'br', anchor is 'tl' (0,0).
+                    let ax = 0.5, ay = 0.5; // anchor relative to top-left (0..1)
+                    let dW = 0, dH = 0;
+
+                    if (handle.includes('l')) { ax = 1; dW = -dx; }
+                    else if (handle.includes('r')) { ax = 0; dW = dx; }
+
+                    if (handle.includes('t')) { ay = 1; dH = -dy; }
+                    else if (handle.includes('b')) { ay = 0; dH = dy; }
+
+                    // 3. Capture Current Global Anchor Position
+                    // Local coords of anchor relative to center
+                    const oldCx = layer.x + layer.width/2;
+                    const oldCy = layer.y + layer.height/2;
+                    const anchorLx = (ax - 0.5) * layer.width;
+                    const anchorLy = (ay - 0.5) * layer.height;
+
+                    // Global Anchor
+                    const anchorGx = oldCx + (anchorLx * Math.cos(angle) - anchorLy * Math.sin(angle));
+                    const anchorGy = oldCy + (anchorLx * Math.sin(angle) + anchorLy * Math.cos(angle));
+
+                    // 4. Update Dimensions
+                    const minSize = 5;
+                    let newW = Math.max(minSize, layer.width + dW);
+                    let newH = Math.max(minSize, layer.height + dH);
+
+                    // 5. Calculate New Center from Anchor
+                    // New Local Anchor offset
+                    const newAnchorLx = (ax - 0.5) * newW;
+                    const newAnchorLy = (ay - 0.5) * newH;
+
+                    // Rotated New Local Anchor
+                    const rNewAnchorLx = newAnchorLx * Math.cos(angle) - newAnchorLy * Math.sin(angle);
+                    const rNewAnchorLy = newAnchorLx * Math.sin(angle) + newAnchorLy * Math.cos(angle);
+
+                    // New Center = GlobalAnchor - RotatedNewLocalAnchor
+                    const newCx = anchorGx - rNewAnchorLx;
+                    const newCy = anchorGy - rNewAnchorLy;
+
+                    // 6. Update Layer
+                    layer.width = newW;
+                    layer.height = newH;
+                    layer.x = newCx - newW/2;
+                    layer.y = newCy - newH/2;
 
                     App.State.lastMouse = pos;
                     App.Render.update();
@@ -1614,24 +1761,11 @@ const App = {
                     this.drawSelectionLasso(ctx, project.selection.tempPath);
                 }
                 else if (['paint','eraser','sel-brush','smudge','clone'].includes(tool)) {
-                    // Adjust drawing to layer local space?
-                    // For now, painting only works if layer is 1:1 and at 0,0 for simplicity,
-                    // or we map it.
-                    // Let's implement mapping.
                     const layer = App.Layers.getActive();
                     if (!layer) return;
 
-                    // Simple offset mapping. Scaling support for painting is complex.
-                    // If layer is scaled, disable paint or warn?
-                    // For now, map simple offset.
-                    const localPos = {
-                        x: (pos.x - layer.x) * (layer.canvas.width / layer.width),
-                        y: (pos.y - layer.y) * (layer.canvas.height / layer.height)
-                    };
-                    const localLast = {
-                        x: (App.State.lastMouse.x - layer.x) * (layer.canvas.width / layer.width),
-                        y: (App.State.lastMouse.y - layer.y) * (layer.canvas.height / layer.height)
-                    };
+                    const localPos = this.toLocal(pos, layer);
+                    const localLast = this.toLocal(App.State.lastMouse, layer);
 
                     const dist = Math.hypot(localPos.x - localLast.x, localPos.y - localLast.y);
                     const step = Math.max(1, App.State.toolSettings.brushSize * 0.1);
@@ -1645,13 +1779,13 @@ const App = {
                                 // Smudge needs careful logic
                             }
                             else if (tool === 'clone') this.paintClone({x, y});
-                            else if (tool === 'sel-brush') this.paintSelectionBrush({x, y});
+                            else if (tool === 'sel-brush') this.paintSelectionBrush({x, y}, e.altKey);
                             else this.paintBrush({x, y});
                         }
                     }
                     // if(tool === 'smudge') this.paintSmudge(last, pos);
                     if (tool === 'clone') this.paintClone(localPos);
-                    else if (tool === 'sel-brush') this.paintSelectionBrush(localPos);
+                    else if (tool === 'sel-brush') this.paintSelectionBrush(localPos, e.altKey);
                     else this.paintBrush(localPos);
 
                     App.State.lastMouse = pos;
@@ -1717,9 +1851,90 @@ const App = {
             }
         },
 
+        performMagicWand(pos) {
+            const layer = App.Layers.getActive();
+            const project = App.getActiveProject();
+            if(!layer || !project) return;
+
+            const local = this.toLocal(pos, layer);
+            const lx = Math.floor(local.x);
+            const ly = Math.floor(local.y);
+
+            if(lx < 0 || lx >= layer.canvas.width || ly < 0 || ly >= layer.canvas.height) return;
+
+            const ctx = layer.canvas.getContext('2d');
+            const w = layer.canvas.width;
+            const h = layer.canvas.height;
+            const imgData = ctx.getImageData(0, 0, w, h);
+            const data = imgData.data;
+
+            const startIdx = (ly * w + lx) * 4;
+            const sr = data[startIdx], sg = data[startIdx+1], sb = data[startIdx+2], sa = data[startIdx+3];
+
+            const tolerance = project.selection.wandTolerance || 30;
+            const visited = new Uint8Array(w * h);
+            const stack = [lx, ly];
+
+            const maskCvs = document.createElement('canvas');
+            maskCvs.width = w; maskCvs.height = h;
+            const mCtx = maskCvs.getContext('2d');
+            const mImgData = mCtx.createImageData(w, h);
+            const mData = mImgData.data;
+
+            visited[ly * w + lx] = 1;
+
+            const match = (idx) => {
+                const r = data[idx], g = data[idx+1], b = data[idx+2], a = data[idx+3];
+                return Math.abs(r-sr)<=tolerance && Math.abs(g-sg)<=tolerance && Math.abs(b-sb)<=tolerance && Math.abs(a-sa)<=tolerance;
+            };
+
+            while(stack.length) {
+                const y = stack.pop();
+                const x = stack.pop();
+
+                const idx = y * w + x;
+                const mIdx = idx * 4;
+                mData[mIdx] = 255; mData[mIdx+1] = 255; mData[mIdx+2] = 255; mData[mIdx+3] = 255;
+
+                const neighbors = [
+                    {dx: 0, dy: -1}, {dx: 0, dy: 1}, {dx: -1, dy: 0}, {dx: 1, dy: 0}
+                ];
+
+                for(let n of neighbors) {
+                    const nx = x + n.dx; const ny = y + n.dy;
+                    if(nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                        const nIdx = ny * w + nx;
+                        if(visited[nIdx] === 0) {
+                            if(match(nIdx * 4)) {
+                                visited[nIdx] = 1;
+                                stack.push(nx, ny);
+                            }
+                        }
+                    }
+                }
+            }
+
+            mCtx.putImageData(mImgData, 0, 0);
+
+            // Project to Global Selection Mask
+            const finalMask = document.createElement('canvas');
+            finalMask.width = project.width; finalMask.height = project.height;
+            const fCtx = finalMask.getContext('2d');
+
+            const cx = layer.x + layer.width/2;
+            const cy = layer.y + layer.height/2;
+            fCtx.translate(cx, cy);
+            fCtx.rotate((layer.rotation || 0) * Math.PI / 180);
+
+            fCtx.drawImage(maskCvs, -layer.width/2, -layer.height/2, layer.width, layer.height);
+
+            project.selection = { active: true, mask: finalMask, type: 'wand' };
+            App.Render.update();
+        },
+
         // Helper: Convert global mask coords to selection? No, selection is global.
         // Painting selection is global.
-        paintSelectionBrush(pos) {
+        paintSelectionBrush(pos, isSubtract) {
             const project = App.getActiveProject();
             if (!project.selection.active || !project.selection.mask) {
                 const mask = document.createElement('canvas');
@@ -1738,6 +1953,8 @@ const App = {
 
             const gradient = bCtx.createRadialGradient(rad, rad, rad * (settings.brushHardness / 100), rad, rad, rad);
             const alpha = settings.brushOpacity / 100;
+            // For subtract, we might want full opacity to erase effectively?
+            // Usually selection brush has alpha.
             gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
             gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
 
@@ -1745,7 +1962,7 @@ const App = {
             bCtx.fillRect(0, 0, size, size);
 
             ctx.save();
-            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalCompositeOperation = isSubtract ? 'destination-out' : 'source-over';
             ctx.drawImage(brush, pos.x - rad, pos.y - rad);
             ctx.restore();
 
