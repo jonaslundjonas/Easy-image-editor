@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kretz Image Editor Pro</title>
-    
+
     <!-- External Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
     <script src="https://unpkg.com/utif@3.1.0/UTIF.js"></script>
@@ -13,10 +13,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
     <!-- Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Brush+Script+MT&family=Courier+New&family=Times+New+Roman&display=swap" rel="stylesheet">
 
     <style>
         :root {
@@ -41,10 +40,9 @@
             height: 100vh;
             display: grid;
             grid-template-columns: 60px 1fr 320px;
-            grid-template-rows: 50px 35px 1fr;
-            grid-template-areas: 
+            grid-template-rows: 50px 1fr;
+            grid-template-areas:
                 "header header header"
-                "tools tabs sidebar"
                 "tools canvas sidebar";
             overflow: hidden;
         }
@@ -69,17 +67,20 @@
         .dropdown-content {
             display: none;
             position: absolute;
-            left: 0; 
+            left: 0;
             background-color: var(--bg-panel);
-            min-width: 160px; 
+            min-width: 160px;
             box-shadow: 0 8px 16px rgba(0,0,0,0.5);
             border: 1px solid var(--border);
             border-radius: var(--radius);
-            z-index: 2000; 
+            z-index: 2000;
             top: 100%;
-            margin-top: 4px; 
+            margin-top: 4px;
         }
+        /* Removed the :hover rule so it only opens on click via JS */
         .dropdown.open .dropdown-content { display: block; }
+
+        /* Active state for the button when menu is open */
         .dropdown.open > button { background-color: var(--bg-surface); color: var(--text-main); }
 
         .dropdown-item {
@@ -97,43 +98,6 @@
         .dropdown-item i { font-size: 16px; color: var(--text-muted); }
         .dropdown-item:hover i { color: var(--accent); }
 
-        /* --- TAB BAR --- */
-        .tab-bar {
-            grid-area: tabs;
-            background: #18181b;
-            display: flex;
-            align-items: flex-end;
-            border-bottom: 1px solid var(--border);
-            overflow-x: auto;
-            padding-left: 10px;
-        }
-        .tab {
-            padding: 8px 15px;
-            background: #27272a;
-            color: #a1a1aa;
-            font-size: 12px;
-            border-top-left-radius: 6px;
-            border-top-right-radius: 6px;
-            margin-right: 2px;
-            cursor: pointer;
-            border: 1px solid transparent;
-            display: flex; gap: 8px; align-items: center;
-        }
-        .tab:hover { background: #3f3f46; }
-        .tab.active {
-            background: #101012;
-            color: #f4f4f5;
-            border: 1px solid var(--border);
-            border-bottom: 1px solid #101012;
-            margin-bottom: -1px;
-            z-index: 10;
-        }
-        .tab-close {
-            border-radius: 50%; padding: 2px;
-            font-size: 10px;
-        }
-        .tab-close:hover { background: #555; color: white; }
-
         /* --- TOOLBAR (Left) --- */
         .toolbar {
             grid-area: tools;
@@ -145,36 +109,58 @@
             padding: 15px 0;
             gap: 10px;
             overflow-y: auto;
-            overflow-x: hidden;
-            grid-row: 2 / span 2; /* Span across tabs and canvas */
+            overflow-x: hidden; /* Prevent horizontal scroll */
         }
 
-        .toolbar::-webkit-scrollbar { width: 5px; }
-        .toolbar::-webkit-scrollbar-track { background: transparent; }
-        .toolbar::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
-        .toolbar::-webkit-scrollbar-thumb:hover { background: #52525b; }
+        /* Toolbar Scrollbar Customization */
+        .toolbar::-webkit-scrollbar {
+            width: 5px;
+        }
+        .toolbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .toolbar::-webkit-scrollbar-thumb {
+            background: #3f3f46; /* Dark Grey */
+            border-radius: 4px;
+        }
+        .toolbar::-webkit-scrollbar-thumb:hover {
+            background: #52525b;
+        }
 
         .tool-btn {
-            width: 36px; height: 36px;
+            width: 36px;
+            height: 36px;
             border-radius: var(--radius);
-            display: flex; align-items: center; justify-content: center;
-            color: var(--text-muted); font-size: 20px;
-            cursor: pointer; transition: all 0.2s;
-            background: transparent; border: none;
-            position: relative; flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: transparent;
+            border: none;
+            position: relative;
+            flex-shrink: 0;
         }
         .tool-btn:hover { color: var(--text-main); background: var(--bg-surface); }
         .tool-btn.active { color: white; background: var(--accent); }
         .tool-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-        
+
         .tool-btn::after {
             content: attr(title);
-            position: absolute; left: 45px;
-            background: black; color: white;
-            padding: 4px 8px; border-radius: 4px;
-            font-size: 11px; opacity: 0;
-            pointer-events: none; transition: opacity 0.2s;
-            white-space: nowrap; z-index: 100;
+            position: absolute;
+            left: 45px;
+            background: black;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            white-space: nowrap;
+            z-index: 100;
         }
         .tool-btn:hover::after { opacity: 1; }
 
@@ -185,15 +171,20 @@
             border-left: 1px solid var(--border);
             overflow-y: auto;
             padding: 0;
-            display: flex; flex-direction: column;
-            grid-row: 2 / span 2;
+            display: flex;
+            flex-direction: column;
         }
         .sidebar-section { border-bottom: 1px solid var(--border); flex-shrink: 0; }
         .sidebar-header {
-            padding: 12px 15px; font-size: 12px; font-weight: 600;
-            text-transform: uppercase; letter-spacing: 0.5px;
-            color: var(--text-muted); display: flex;
-            justify-content: space-between; cursor: pointer;
+            padding: 12px 15px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+            cursor: pointer;
             background: var(--bg-panel);
         }
         .sidebar-header:hover { color: var(--text-main); }
@@ -202,22 +193,28 @@
 
         /* --- LAYERS PANEL --- */
         #layers-container {
-            display: flex; flex-direction: column;
-            max-height: 250px; overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            max-height: 250px;
+            overflow-y: auto;
             background: #101012;
             border: 1px solid var(--border);
             border-radius: 4px;
         }
         .layer-item {
-            display: flex; align-items: center;
-            padding: 8px; background: var(--bg-panel);
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            background: var(--bg-panel);
             border-bottom: 1px solid var(--border);
-            cursor: pointer; user-select: none;
+            cursor: pointer;
+            user-select: none;
         }
         .layer-item.active { background: #2d2d33; border-left: 2px solid var(--accent); }
         .layer-thumb {
             width: 30px; height: 30px;
-            background: #444; margin-right: 8px;
+            background: #444;
+            margin-right: 8px;
             border: 1px solid #555;
             background-image: radial-gradient(#888 1px, transparent 1px);
             background-size: 4px 4px;
@@ -230,40 +227,59 @@
         .layer-btn.active { color: var(--accent); }
 
         .layer-actions {
-            display: flex; justify-content: space-between;
-            padding: 5px 0; border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid var(--border);
             margin-bottom: 10px;
         }
 
         /* Controls */
         .control-group { display: flex; flex-direction: column; gap: 6px; }
         .control-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); }
-        
+
         input[type="range"] {
-            -webkit-appearance: none; width: 100%; height: 4px;
-            background: var(--bg-surface); border-radius: 2px; outline: none;
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: var(--bg-surface);
+            border-radius: 2px;
+            outline: none;
         }
         input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none; width: 14px; height: 14px;
-            background: var(--accent); border-radius: 50%;
-            cursor: pointer; transition: transform 0.1s;
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.1s;
         }
         input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
 
-        input[type="number"], input[type="text"], input[type="color"], select, textarea {
-            background: var(--bg-app); border: 1px solid var(--border);
-            color: white; padding: 6px; border-radius: 4px;
-            font-size: 12px; width: 100%;
+        input[type="number"], input[type="text"], input[type="color"], select {
+            background: var(--bg-app);
+            border: 1px solid var(--border);
+            color: white;
+            padding: 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            width: 100%;
         }
         input[type="color"] { height: 30px; padding: 2px; cursor: pointer; }
-        textarea { resize: vertical; min-height: 60px; }
 
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .btn {
-            background: var(--bg-surface); border: 1px solid var(--border);
-            color: var(--text-main); padding: 8px; border-radius: var(--radius);
-            font-size: 12px; cursor: pointer; transition: all 0.2s;
-            text-align: center; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 8px;
+            border-radius: var(--radius);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+            display: inline-flex; align-items: center; justify-content: center; gap: 5px;
         }
         .btn:hover { border-color: var(--text-muted); background: #3f3f46; }
         .btn-primary { background: var(--accent); border-color: var(--accent); color: white; }
@@ -277,37 +293,57 @@
             background-color: #101012;
             background-image: radial-gradient(#27272a 1px, transparent 1px);
             background-size: 20px 20px;
-            display: flex; align-items: center; justify-content: center;
-            overflow: hidden; position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
         }
-        
+
         #canvas-wrapper {
             box-shadow: 0 20px 50px rgba(0,0,0,0.5);
             transition: transform 0.05s linear;
-            position: relative; transform-origin: center;
-            background: #1a1a1a;
+            position: relative;
+            transform-origin: center;
+            background: #1a1a1a; /* Canvas base */
         }
 
         #main-canvas { display: block; image-rendering: auto; position: relative; z-index: 10; }
+
+        /* Overlay Layers */
         .overlay-canvas { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 20; }
         .is-drawing .overlay-canvas { pointer-events: auto; cursor: crosshair; }
         .is-cloning .overlay-canvas { pointer-events: auto; cursor: none; }
         .is-selecting .overlay-canvas { pointer-events: auto; cursor: crosshair; }
 
+        /* Selection Styling - High Vis Double Dash */
         .ants { animation: ants 1s linear infinite; }
         @keyframes ants { to { stroke-dashoffset: -20; } }
 
+        /* Clone Tool Cursor - Moved to fixed position */
         .clone-cursor {
-            position: fixed; border: 1px solid white; box-shadow: 0 0 2px black;
-            border-radius: 50%; pointer-events: none; display: none; z-index: 9999;
+            position: fixed;
+            border: 1px solid white;
+            box-shadow: 0 0 2px black;
+            border-radius: 50%;
+            pointer-events: none;
+            display: none;
+            z-index: 9999;
         }
         .clone-source-indicator {
-            position: fixed; width: 10px; height: 10px;
-            border: 2px solid #00ff00; background: rgba(0,255,0,0.2);
-            border-radius: 50%; pointer-events: none; display: none;
-            z-index: 9998; transform: translate(-50%, -50%); box-shadow: 0 0 2px black;
+            position: fixed;
+            width: 10px; height: 10px;
+            border: 2px solid #00ff00;
+            background: rgba(0,255,0,0.2);
+            border-radius: 50%;
+            pointer-events: none;
+            display: none;
+            z-index: 9998;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 2px black;
         }
 
+        /* Drag Drop Overlay */
         #drop-zone {
             position: absolute; inset: 0;
             background: rgba(99, 102, 241, 0.1);
@@ -315,7 +351,8 @@
             display: flex; flex-direction: column;
             align-items: center; justify-content: center;
             opacity: 0; pointer-events: none;
-            transition: opacity 0.2s; z-index: 50;
+            transition: opacity 0.2s;
+            z-index: 50;
         }
         #drop-zone.active { opacity: 1; pointer-events: auto; backdrop-filter: blur(2px); }
         #drop-zone i { font-size: 48px; color: var(--accent); margin-bottom: 10px; }
@@ -323,25 +360,34 @@
         /* --- MODALS --- */
         .modal-backdrop {
             position: fixed; inset: 0;
-            background: rgba(0,0,0,0.7); backdrop-filter: blur(2px);
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(2px);
             display: flex; align-items: center; justify-content: center;
-            z-index: 1000; opacity: 0; pointer-events: none;
+            z-index: 1000;
+            opacity: 0; pointer-events: none;
             transition: opacity 0.2s;
         }
         .modal-backdrop.open { opacity: 1; pointer-events: auto; }
         .modal {
-            background: var(--bg-panel); border: 1px solid var(--border);
-            border-radius: 8px; padding: 20px; width: 300px;
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            width: 300px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
         }
         .modal h3 { margin: 0 0 15px 0; font-size: 16px; font-weight: 500; }
         .modal select, .modal input[type="text"] { margin-bottom: 15px; }
         .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 
+        /* Loading Spinner */
         .loader {
-            width: 16px; height: 16px; border: 2px solid var(--text-muted);
-            border-bottom-color: transparent; border-radius: 50%;
-            display: inline-block; animation: rotation 1s linear infinite;
+            width: 16px; height: 16px;
+            border: 2px solid var(--text-muted);
+            border-bottom-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            animation: rotation 1s linear infinite;
             display: none;
         }
         @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -359,24 +405,26 @@
                 <span>Kretz Image Editor Pro</span>
                 <span class="loader" id="global-loader"></span>
             </div>
-            
+
+            <!-- File Dropdown -->
             <div class="dropdown" id="menu-file">
                 <button class="btn dropdown-trigger" style="border:none; background: transparent; padding: 5px 10px;">
                     <i class="ph ph-file"></i> File <i class="ph ph-caret-down"></i>
                 </button>
                 <div class="dropdown-content">
                     <div class="dropdown-item" onclick="App.UI.openNewModal()">
-                        <i class="ph ph-plus"></i> New Project
+                        <i class="ph ph-plus"></i> New
                     </div>
                     <label class="dropdown-item" for="file-input">
-                        <i class="ph ph-folder-open"></i> Open Image
+                        <i class="ph ph-folder-open"></i> Open
                     </label>
                     <div class="dropdown-item" onclick="App.UI.openSaveModal()">
-                        <i class="ph ph-download-simple"></i> Save Current
+                        <i class="ph ph-download-simple"></i> Save
                     </div>
                 </div>
             </div>
 
+            <!-- Edit Dropdown -->
             <div class="dropdown" id="menu-edit">
                 <button class="btn dropdown-trigger" style="border:none; background: transparent; padding: 5px 10px;">
                     <i class="ph ph-pencil-simple"></i> Edit <i class="ph ph-caret-down"></i>
@@ -405,6 +453,7 @@
                 </div>
             </div>
 
+            <!-- Transform Dropdown -->
             <div class="dropdown" id="menu-transform">
                 <button class="btn dropdown-trigger" style="border:none; background: transparent; padding: 5px 10px;">
                     <i class="ph ph-arrows-out-cardinal"></i> Transform <i class="ph ph-caret-down"></i>
@@ -433,15 +482,13 @@
             </div>
         </div>
 
-        <div class="file-info" id="filename-display"></div>
-        
+        <div class="file-info" id="filename-display">Drag & Drop an image</div>
+
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <button class="btn" id="btn-compare" disabled>Hold to Compare</button>
+        </div>
         <input type="file" id="file-input" hidden accept="image/*,application/pdf">
     </header>
-
-    <!-- TABS -->
-    <div id="tab-bar" class="tab-bar">
-        <!-- Tabs injected here -->
-    </div>
 
     <!-- TOOLBAR -->
     <aside class="toolbar">
@@ -449,9 +496,9 @@
         <button class="tool-btn" id="tool-hand" title="Hand Tool (Pan)" data-tool="hand"><i class="ph ph-hand-palm"></i></button>
         <button class="tool-btn" id="tool-crop" title="Crop (Global)" data-tool="crop"><i class="ph ph-crop"></i></button>
         <button class="tool-btn" id="tool-zoom" title="Zoom Tool" data-tool="zoom"><i class="ph ph-magnifying-glass"></i></button>
-        
-        <div style="height: 1px; background: var(--border); width: 60%;"></div>
 
+        <div style="height: 1px; background: var(--border); width: 60%;"></div>
+        <!-- Selection Tools -->
         <button class="tool-btn" id="tool-sel-rect" title="Rect Select" data-tool="sel-rect"><i class="ph ph-selection-plus"></i></button>
         <button class="tool-btn" id="tool-sel-oval" title="Oval Select" data-tool="sel-oval"><i class="ph ph-circle"></i></button>
         <button class="tool-btn" id="tool-sel-lasso" title="Lasso Select" data-tool="sel-lasso"><i class="ph ph-lasso"></i></button>
@@ -459,18 +506,21 @@
         <button class="tool-btn" id="tool-sel-brush" title="Brush Select" data-tool="sel-brush"><i class="ph ph-paint-brush-broad"></i></button>
 
         <div style="height: 1px; background: var(--border); width: 60%;"></div>
-        
+
         <button class="tool-btn" id="tool-clone" title="Clone Stamp (Alt+Click to Source)" data-tool="clone"><i class="ph ph-stamp"></i></button>
-        <button class="tool-btn" id="tool-text" title="Text Tool" data-tool="text"><i class="ph ph-text-t"></i></button>
 
         <div style="height: 1px; background: var(--border); width: 60%;"></div>
 
+        <!-- Draw Tools Group (Including Paint) -->
         <button class="tool-btn" id="tool-paint" title="Paint Brush" data-tool="paint"><i class="ph ph-paint-brush"></i></button>
         <button class="tool-btn" id="tool-smudge" title="Smudge Tool" data-tool="smudge"><i class="ph ph-hand-pointing"></i></button>
         <button class="tool-btn" id="tool-eraser" title="Eraser" data-tool="eraser"><i class="ph ph-eraser"></i></button>
         <button class="tool-btn" id="tool-draw-rect" title="Draw Rectangle" data-tool="rect"><i class="ph ph-rectangle"></i></button>
         <button class="tool-btn" id="tool-draw-line" title="Draw Line" data-tool="line"><i class="ph ph-line-segment"></i></button>
         <button class="tool-btn" id="tool-draw-arrow" title="Draw Arrow" data-tool="arrow"><i class="ph ph-arrow-up-right"></i></button>
+
+        <div style="margin-top: auto;"></div>
+        <!-- Removed Undo/Redo buttons from left panel -->
     </aside>
 
     <!-- CANVAS -->
@@ -480,19 +530,21 @@
             <span>Drop image to add as Layer</span>
         </div>
         <div id="canvas-wrapper">
+            <!-- Main canvas acts as the compositor -->
             <canvas id="main-canvas"></canvas>
             <canvas id="overlay-canvas" class="overlay-canvas"></canvas>
+            <!-- Hidden elements for processing -->
             <img id="cropper-img" style="display:none; max-width: 100%;">
         </div>
     </main>
 
-    <!-- CURSORS -->
+    <!-- CURSORS (Moved outside wrapper for correct positioning) -->
     <div id="clone-cursor" class="clone-cursor"></div>
     <div id="clone-source-indicator" class="clone-source-indicator"></div>
 
     <!-- PROPERTIES SIDEBAR -->
     <aside class="sidebar">
-        
+
         <!-- LAYERS PANEL -->
         <div class="sidebar-section">
             <div class="sidebar-header" onclick="toggleSection('layers-content')">
@@ -552,6 +604,18 @@
                     <div class="control-label"><span>Saturation</span> <span id="val-saturate">100%</span></div>
                     <input type="range" data-filter="saturate" min="0" max="200" value="100">
                 </div>
+                <div class="control-group">
+                    <div class="control-label"><span>Highlights</span> <span id="val-highlights">0</span></div>
+                    <input type="range" data-filter="highlights" min="-100" max="100" value="0">
+                </div>
+                <div class="control-group">
+                    <div class="control-label"><span>Shadows</span> <span id="val-shadows">0</span></div>
+                    <input type="range" data-filter="shadows" min="-100" max="100" value="0">
+                </div>
+                <div class="control-group">
+                    <div class="control-label"><span>Warmth</span> <span id="val-warmth">0</span></div>
+                    <input type="range" data-filter="warmth" min="-100" max="100" value="0">
+                </div>
                  <div class="control-group">
                     <div class="control-label"><span>White Point</span> <span id="val-whitepoint">255</span></div>
                     <input type="range" data-filter="whitepoint" min="128" max="255" value="255">
@@ -586,7 +650,7 @@
                     <input type="range" data-filter="pixelate" min="0" max="500" value="0">
                 </div>
                 <div class="control-group">
-                    <div class="control-label"><span>Vignette</span> <span id="val-vignette">0%</span></div>
+                    <div class="control-label"><span>Vignette Amount</span> <span id="val-vignette">0%</span></div>
                     <input type="range" data-filter="vignette" min="0" max="100" value="0">
                 </div>
             </div>
@@ -604,14 +668,21 @@
                     <button class="btn" data-cmd="flip-h" title="Flip H"><i class="ph ph-arrows-left-right"></i> Flip H</button>
                     <button class="btn" data-cmd="flip-v" title="Flip V"><i class="ph ph-arrows-down-up"></i> Flip V</button>
                 </div>
-                <button class="btn" style="width:100%; margin-top:5px;" onclick="App.UI.openResizeLayerModal()">Resize Layer...</button>
-
                 <div class="control-group" style="margin-top:5px;">
-                    <div class="control-label"><span>Custom Rotation</span></div>
+                    <div class="control-label"><span>Custom Rotation (deg)</span></div>
                     <div style="display:flex; gap:5px;">
                         <input type="number" id="custom-rot-val" value="0" placeholder="Angle">
                         <button class="btn" onclick="App.UI.applyCustomRotation()">Apply</button>
                     </div>
+                </div>
+                <hr style="border:0; border-top:1px solid var(--border); width:100%;">
+                <div class="control-group">
+                    <div class="control-label"><span>Global Resize (px)</span></div>
+                    <div class="btn-grid">
+                        <input type="number" id="resize-w" placeholder="Width">
+                        <input type="number" id="resize-h" placeholder="Height">
+                    </div>
+                    <button class="btn" style="margin-top:5px;" onclick="App.UI.applyResize()">Apply Resize</button>
                 </div>
             </div>
         </div>
@@ -649,10 +720,10 @@
         </div>
     </div>
 
-    <!-- New Project Modal -->
+    <!-- New Image Modal -->
     <div class="modal-backdrop" id="new-image-modal">
         <div class="modal">
-            <h3>New Project</h3>
+            <h3>New Image</h3>
             <div class="control-group">
                 <label>Width (px)</label>
                 <input type="number" id="new-width" value="800">
@@ -682,16 +753,16 @@
             <h3>Custom Rotation</h3>
             <div class="control-group">
                 <label>Angle (Degrees)</label>
-                <input type="number" id="custom-rot-val-modal" value="0" placeholder="e.g. 45">
+                <input type="number" id="custom-rot-val" value="0" placeholder="e.g. 45">
             </div>
             <div class="modal-actions">
                 <button class="btn" onclick="App.UI.closeModal('rotate-modal')">Cancel</button>
-                <button class="btn btn-primary" onclick="App.UI.applyCustomRotationFromModal()">Apply</button>
+                <button class="btn btn-primary" onclick="App.UI.applyCustomRotation()">Apply</button>
             </div>
         </div>
     </div>
 
-    <!-- Resize Image Modal -->
+    <!-- Resize Modal -->
     <div class="modal-backdrop" id="resize-modal">
         <div class="modal">
             <h3>Resize Image</h3>
@@ -710,118 +781,76 @@
         </div>
     </div>
 
-    <!-- Resize Layer Modal -->
-    <div class="modal-backdrop" id="resize-layer-modal">
-        <div class="modal">
-            <h3>Resize Active Layer</h3>
-            <div class="control-group">
-                <label>Width (px)</label>
-                <input type="number" id="resize-layer-w" placeholder="Width">
-            </div>
-            <div class="control-group">
-                <label>Height (px)</label>
-                <input type="number" id="resize-layer-h" placeholder="Height">
-            </div>
-            <div class="modal-actions">
-                <button class="btn" onclick="App.UI.closeModal('resize-layer-modal')">Cancel</button>
-                <button class="btn btn-primary" onclick="App.UI.applyResizeLayer()">Apply</button>
-            </div>
-        </div>
-    </div>
-
 <script>
-class Project {
-    constructor(w, h, name) {
-        this.id = 'proj_' + (++App.State.projectCounter);
-        this.filename = name || "untitled";
-        this.width = w;
-        this.height = h;
-        this.layers = [];
-        this.activeLayerId = null;
-        this.layerCounter = 0;
-        this.history = [];
-        this.historyIndex = -1;
-        this.zoom = 1;
-        this.pan = { x: 0, y: 0 };
-        this.selection = { active: false, mask: null, type: null, wandTolerance: 30 };
-        this.cropper = null;
-    }
-}
-
 const App = {
     State: {
-        projects: [],
-        activeProjectId: null,
-        projectCounter: 0,
-
-        clipboard: null, // Global clipboard
-
+        width: 800,
+        height: 600,
+        filename: "untitled",
+        zoom: 1,
+        pan: { x: 0, y: 0 },
         activeTool: 'move',
         isDragging: false,
         isDrawing: false,
         lastMouse: { x: 0, y: 0 },
         drawStart: { x: 0, y: 0 },
         isSpacePressed: false,
-        dragMode: null,
-        
+        dragMode: null, // 'pan' or 'layer'
+
+        layers: [],
+        activeLayerId: null,
+        layerCounter: 0,
+
+        history: [],
+        historyIndex: -1,
+        clipboard: null,
+
+        selection: {
+            active: false,
+            mask: null, // Canvas element
+            type: null,
+            wandTolerance: 30
+        },
+
         cloneSource: null,
         cloneLayerId: null,
-        cloneOffset: null,
-
         toolSettings: {
             drawColor: '#f2b8b5',
             drawSize: 5,
             brushSize: 30,
             brushHardness: 50,
-            brushOpacity: 100,
-            text: {
-                content: "Your Text",
-                fontFamily: "Inter",
-                fontSize: 40,
-                bold: false,
-                italic: false,
-                underline: false,
-                color: "#ffffff"
-            }
-        }
-    },
-
-    getActiveProject() {
-        return this.State.projects.find(p => p.id === this.State.activeProjectId);
+            brushOpacity: 100
+        },
+        cropper: null
     },
 
     // --- LAYERS LOGIC ---
     Layers: {
-        createId(project) { return 'layer_' + (++project.layerCounter); },
-        
-        addLayer(source, name) {
-            const project = App.getActiveProject();
-            if(!project) return;
+        createId() { return 'layer_' + (++App.State.layerCounter); },
 
-            const id = this.createId(project);
+        addLayer(source, name) {
+            const id = this.createId();
             const canvas = document.createElement('canvas');
-            const originalCanvas = document.createElement('canvas'); 
-            
-            canvas.width = project.width;
-            canvas.height = project.height;
-            originalCanvas.width = project.width;
-            originalCanvas.height = project.height;
+            const originalCanvas = document.createElement('canvas');
+
+            canvas.width = App.State.width;
+            canvas.height = App.State.height;
+            originalCanvas.width = App.State.width;
+            originalCanvas.height = App.State.height;
 
             const ctx = canvas.getContext('2d');
             const oCtx = originalCanvas.getContext('2d');
-            
+
             if(source) {
-                // If source is a canvas or image, draw it.
-                // Center it if it's smaller? No, 0,0 for now.
-                const w = Math.min(source.width, project.width);
-                const h = Math.min(source.height, project.height);
+                const w = Math.min(source.width, App.State.width);
+                const h = Math.min(source.height, App.State.height);
                 ctx.drawImage(source, 0, 0, w, h);
                 oCtx.drawImage(source, 0, 0, w, h);
             }
 
             const newLayer = {
                 id: id,
-                name: name || `Layer ${project.layers.length + 1}`,
+                name: name || `Layer ${App.State.layers.length + 1}`,
                 canvas: canvas,
                 originalCanvas: originalCanvas, // Base for filters
                 visible: true,
@@ -831,71 +860,7 @@ const App = {
                 x: 0, y: 0
             };
 
-            project.layers.unshift(newLayer);
-            this.setActive(id);
-            App.Render.update();
-            App.UI.renderLayerList();
-            App.History.push();
-        },
-
-        addTextLayer(config, x, y) {
-            const project = App.getActiveProject();
-            if(!project) return;
-
-            const id = this.createId(project);
-            const canvas = document.createElement('canvas');
-            const originalCanvas = document.createElement('canvas');
-            canvas.width = project.width; canvas.height = project.height;
-            originalCanvas.width = project.width; originalCanvas.height = project.height;
-
-            const ctx = canvas.getContext('2d');
-            const oCtx = originalCanvas.getContext('2d');
-
-            // Construct Font String
-            const style = [];
-            if(config.italic) style.push('italic');
-            if(config.bold) style.push('bold');
-            const fontStr = `${style.join(' ')} ${config.fontSize}px "${config.fontFamily}"`;
-
-            ctx.font = fontStr;
-            ctx.fillStyle = config.color;
-            ctx.textBaseline = 'top';
-
-            const lines = config.content.split('\n');
-            const lineHeight = config.fontSize * 1.2;
-
-            lines.forEach((line, i) => {
-                const ly = y + (i * lineHeight);
-                ctx.fillText(line, x, ly);
-
-                // Underline
-                if(config.underline) {
-                    const width = ctx.measureText(line).width;
-                    ctx.beginPath();
-                    ctx.strokeStyle = config.color;
-                    ctx.lineWidth = Math.max(1, config.fontSize / 15);
-                    ctx.moveTo(x, ly + config.fontSize);
-                    ctx.lineTo(x + width, ly + config.fontSize);
-                    ctx.stroke();
-                }
-            });
-
-            // Mirror to original
-            oCtx.drawImage(canvas, 0, 0);
-
-            const newLayer = {
-                id: id,
-                name: "Text: " + (config.content.length > 10 ? config.content.substring(0,10)+"..." : config.content),
-                canvas: canvas,
-                originalCanvas: originalCanvas,
-                visible: true,
-                opacity: 100,
-                blendMode: 'source-over',
-                filters: this.getDefaultFilters(),
-                x: 0, y: 0
-            };
-
-            project.layers.unshift(newLayer);
+            App.State.layers.unshift(newLayer);
             this.setActive(id);
             App.Render.update();
             App.UI.renderLayerList();
@@ -903,8 +868,8 @@ const App = {
         },
 
         getDefaultFilters() {
-            return { 
-                brightness: 100, contrast: 100, saturate: 100, warmth: 0, 
+            return {
+                brightness: 100, contrast: 100, saturate: 100, warmth: 0,
                 blur: 0, sharpen: 0, vignette: 0, pixelate: 0,
                 highlights: 0, shadows: 0, whitepoint: 255, blackpoint: 0,
                 grayscale: false, invert: false
@@ -914,42 +879,33 @@ const App = {
         addEmptyLayer() { this.addLayer(null, "New Layer"); },
 
         deleteActiveLayer() {
-            const project = App.getActiveProject();
-            if(!project || project.layers.length <= 1) { alert("Cannot delete the last layer."); return; }
-            const idx = project.layers.findIndex(l => l.id === project.activeLayerId);
+            if(App.State.layers.length <= 1) { alert("Cannot delete the last layer."); return; }
+            const idx = App.State.layers.findIndex(l => l.id === App.State.activeLayerId);
             if(idx > -1) {
-                project.layers.splice(idx, 1);
-                this.setActive(project.layers[0].id);
+                App.State.layers.splice(idx, 1);
+                this.setActive(App.State.layers[0].id);
                 App.Render.update();
                 App.UI.renderLayerList();
                 App.History.push();
             }
         },
 
-        getActive() {
-            const project = App.getActiveProject();
-            if(!project) return null;
-            return project.layers.find(l => l.id === project.activeLayerId);
-        },
+        getActive() { return App.State.layers.find(l => l.id === App.State.activeLayerId); },
 
         setActive(id) {
-            const project = App.getActiveProject();
-            if(!project) return;
-            project.activeLayerId = id;
+            App.State.activeLayerId = id;
             App.UI.renderLayerList();
             App.UI.syncControls();
         },
 
         moveLayer(dir) {
-            const project = App.getActiveProject();
-            if(!project) return;
-            const idx = project.layers.findIndex(l => l.id === project.activeLayerId);
+            const idx = App.State.layers.findIndex(l => l.id === App.State.activeLayerId);
             if(idx < 0) return;
-            const newIdx = idx - dir; 
-            if(newIdx >= 0 && newIdx < project.layers.length) {
-                const temp = project.layers[idx];
-                project.layers[idx] = project.layers[newIdx];
-                project.layers[newIdx] = temp;
+            const newIdx = idx - dir;
+            if(newIdx >= 0 && newIdx < App.State.layers.length) {
+                const temp = App.State.layers[idx];
+                App.State.layers[idx] = App.State.layers[newIdx];
+                App.State.layers[newIdx] = temp;
                 App.Render.update();
                 App.UI.renderLayerList();
                 App.History.push();
@@ -957,25 +913,24 @@ const App = {
         },
 
         mergeDown() {
-            const project = App.getActiveProject();
-            if(!project) return;
-            const idx = project.layers.findIndex(l => l.id === project.activeLayerId);
-            if(idx >= project.layers.length - 1 || idx < 0) return;
-            const top = project.layers[idx];
-            const bottom = project.layers[idx+1];
-            
+            const idx = App.State.layers.findIndex(l => l.id === App.State.activeLayerId);
+            if(idx >= App.State.layers.length - 1 || idx < 0) return;
+            const top = App.State.layers[idx];
+            const bottom = App.State.layers[idx+1];
+
             const ctx = bottom.canvas.getContext('2d');
-            const oCtx = bottom.originalCanvas.getContext('2d'); 
+            const oCtx = bottom.originalCanvas.getContext('2d');
 
             ctx.save();
             ctx.globalAlpha = top.opacity / 100;
             ctx.globalCompositeOperation = top.blendMode;
-            ctx.drawImage(top.canvas, top.x, top.y);
+            // Apply active selection mask if exists? No, merge usually ignores selection
+            ctx.drawImage(top.canvas, 0, 0);
             ctx.restore();
 
-            oCtx.drawImage(bottom.canvas, 0, 0); // Update original is tricky with merge, assume rasterized
+            oCtx.drawImage(bottom.canvas, 0, 0);
 
-            project.layers.splice(idx, 1);
+            App.State.layers.splice(idx, 1);
             this.setActive(bottom.id);
             App.Render.update();
             App.UI.renderLayerList();
@@ -993,46 +948,24 @@ const App = {
 
         toggleVisibility(id, e) {
             e.stopPropagation();
-            const project = App.getActiveProject();
-            const layer = project.layers.find(l => l.id === id);
+            const layer = App.State.layers.find(l => l.id === id);
             if(layer) {
                 layer.visible = !layer.visible;
                 App.Render.update();
                 App.UI.renderLayerList();
             }
-        },
-
-        resizeActive(w, h) {
-            const layer = this.getActive();
-            if(!layer) return;
-
-            const resizeCvs = (oldCvs) => {
-                const newCvs = document.createElement('canvas');
-                newCvs.width = w; newCvs.height = h;
-                newCvs.getContext('2d').drawImage(oldCvs, 0, 0, w, h);
-                return newCvs;
-            };
-
-            layer.canvas = resizeCvs(layer.canvas);
-            layer.originalCanvas = resizeCvs(layer.originalCanvas);
-
-            App.Render.update();
-            App.History.push();
         }
     },
 
     // --- RENDERING (COMPOSITOR) ---
     Render: {
         update() {
-            const project = App.getActiveProject();
-            if(!project) return;
-
             const canvas = document.getElementById('main-canvas');
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            const layersToRender = [...project.layers].reverse();
-            
+
+            const layersToRender = [...App.State.layers].reverse();
+
             layersToRender.forEach(layer => {
                 if(!layer.visible) return;
                 ctx.save();
@@ -1045,18 +978,20 @@ const App = {
             // Render Selection Overlay
             const ovCtx = document.getElementById('overlay-canvas').getContext('2d');
             ovCtx.clearRect(0, 0, ovCtx.canvas.width, ovCtx.canvas.height);
-            
-            if(project.selection.active && project.selection.mask) {
+
+            if(App.State.selection.active && App.State.selection.mask) {
+                // 1. Draw the mask with tint
                 ovCtx.save();
                 ovCtx.globalAlpha = 0.2;
-                ovCtx.fillStyle = '#6366f1';
-                ovCtx.drawImage(project.selection.mask, 0, 0);
+                ovCtx.fillStyle = '#6366f1'; // Indigo tint
+                ovCtx.drawImage(App.State.selection.mask, 0, 0);
                 ovCtx.restore();
 
-                if(project.selection.type !== 'wand') {
-                    if(project.selection.pathFunc) {
+                // 2. Draw visible outline (Simulated marching ants)
+                if(App.State.selection.type !== 'wand') {
+                    if(App.State.selection.pathFunc) {
                         ovCtx.beginPath();
-                        project.selection.pathFunc(ovCtx);
+                        App.State.selection.pathFunc(ovCtx);
                         ovCtx.strokeStyle = 'white'; ovCtx.lineWidth = 2;
                         ovCtx.setLineDash([6, 4]);
                         ovCtx.stroke();
@@ -1082,16 +1017,17 @@ const App = {
         },
 
         renderLayer(layer) {
-            const project = App.getActiveProject();
             const ctx = layer.canvas.getContext('2d');
             const f = layer.filters;
 
+            // 1. Reset to original
             ctx.clearRect(0,0, layer.canvas.width, layer.canvas.height);
-            
+
+            // 2. Apply Filters to a temp canvas
             const tempC = document.createElement('canvas');
             tempC.width = layer.canvas.width; tempC.height = layer.canvas.height;
             const tCtx = tempC.getContext('2d');
-            
+
             let filterString = `brightness(${f.brightness}%) contrast(${f.contrast}%) saturate(${f.saturate}%)`;
             if(f.grayscale) filterString += ` grayscale(100%)`;
             if(f.invert) filterString += ` invert(100%)`;
@@ -1101,7 +1037,7 @@ const App = {
             tCtx.drawImage(layer.originalCanvas, 0, 0);
             tCtx.filter = 'none';
 
-            if (f.warmth !== 0 || f.vignette > 0 || f.sharpen > 0 || f.pixelate > 0 || 
+            if (f.warmth !== 0 || f.vignette > 0 || f.sharpen > 0 || f.pixelate > 0 ||
                 f.highlights !== 0 || f.shadows !== 0 || f.blackpoint !== 0 || f.whitepoint !== 255) {
                 const iD = tCtx.getImageData(0, 0, tempC.width, tempC.height);
                 this.processPixels(iD, f);
@@ -1109,22 +1045,33 @@ const App = {
                 if(f.pixelate > 0) this.applyPixelate(tCtx, tempC.width, tempC.height, f.pixelate);
             }
 
-            if(project.selection.active && project.selection.mask) {
+            // 3. If Selection is Active, Mask the Filters!
+            // Result = Original (outside selection) + Filtered (inside selection)
+            if(App.State.selection.active && App.State.selection.mask) {
+                // A. Draw Original fully
                 ctx.drawImage(layer.originalCanvas, 0, 0);
+
+                // B. Cut out the Filtered result using the selection mask
                 const maskedFiltered = document.createElement('canvas');
                 maskedFiltered.width = layer.canvas.width; maskedFiltered.height = layer.canvas.height;
                 const mCtx = maskedFiltered.getContext('2d');
-                mCtx.drawImage(tempC, 0, 0);
+
+                mCtx.drawImage(tempC, 0, 0); // Draw filtered
                 mCtx.globalCompositeOperation = 'destination-in';
-                mCtx.drawImage(project.selection.mask, 0, 0);
+                mCtx.drawImage(App.State.selection.mask, 0, 0); // Keep only selected area
+
+                // C. Draw masked filtered over original
                 ctx.drawImage(maskedFiltered, 0, 0);
             } else {
+                // No selection, apply globally
                 ctx.drawImage(tempC, 0, 0);
             }
+
             App.Render.update();
         },
 
         processPixels(imgData, f) {
+            // ... existing pixel logic ...
             const d = imgData.data;
             const w = imgData.width; const h = imgData.height;
             const cx = w/2, cy = h/2;
@@ -1158,7 +1105,7 @@ const App = {
 
         applyPixelate(ctx, w, h, amount) {
             if(amount < 1) return;
-            const size = amount / 100; 
+            const size = amount / 100;
             const wScaled = Math.max(1, Math.floor(w * (1 - size*0.95)));
             const hScaled = Math.max(1, Math.floor(h * (1 - size*0.95)));
             ctx.drawImage(ctx.canvas, 0, 0, w, h, 0, 0, wScaled, hScaled);
@@ -1201,37 +1148,25 @@ const App = {
         loadImageSrc(src, name) {
             const img = new Image();
             img.onload = () => {
-                // Always create a new project when opening a file
-                // UNLESS the current project is "untitled", empty (1 layer, blank), and has no history.
-                const curr = App.getActiveProject();
-                let useCurrent = false;
-                if(curr && curr.filename === 'untitled' && curr.history.length === 0 && curr.layers.length === 1 && curr.layers[0].name === "Background") {
-                    // Check if background is empty white? Assume yes for now.
-                    // useCurrent = true;
-                    // Actually, safer to always open new tab to avoid confusion.
+                if(App.State.layers.length === 0) {
+                    App.State.width = img.width;
+                    App.State.height = img.height;
+                    App.State.filename = name;
+                    const canvas = document.getElementById('main-canvas');
+                    canvas.width = img.width; canvas.height = img.height;
+                    const overlay = document.getElementById('overlay-canvas');
+                    overlay.width = img.width; overlay.height = img.height;
+                    document.getElementById('resize-w').value = img.width;
+                    document.getElementById('resize-h').value = img.height;
+                    App.State.zoom = Math.min( (window.innerWidth-400)/img.width, (window.innerHeight-100)/img.height, 1);
                 }
-
-                if(!useCurrent) {
-                    this.createProjectFromImage(img, name);
-                }
-
+                App.Layers.addLayer(img, name);
+                App.UI.updateTransform();
+                App.UI.updateFilename(App.State.filename);
                 App.UI.setBusy(false);
+                document.getElementById('btn-compare').disabled = false;
             };
             img.src = src;
-        },
-
-        createProjectFromImage(img, name) {
-            const proj = new Project(img.width, img.height, name);
-            App.State.projects.push(proj);
-            App.State.activeProjectId = proj.id;
-
-            App.Layers.addLayer(img, name);
-
-            // Adjust Zoom
-            proj.zoom = Math.min( (window.innerWidth-400)/img.width, (window.innerHeight-100)/img.height, 1);
-
-            App.UI.renderTabs();
-            App.UI.activateProject(proj.id);
         },
 
         createNewProject() {
@@ -1239,29 +1174,42 @@ const App = {
             const h = parseInt(document.getElementById('new-height').value) || 600;
             const bg = document.getElementById('new-bg').value;
 
-            const proj = new Project(w, h, "Untitled");
-            App.State.projects.push(proj);
-            App.State.activeProjectId = proj.id;
+            // Reset State
+            App.State.layers = [];
+            App.State.history = [];
+            App.State.historyIndex = -1;
+            App.State.width = w;
+            App.State.height = h;
+            App.State.filename = "untitled";
+            App.State.layerCounter = 0;
+
+            const main = document.getElementById('main-canvas');
+            main.width = w; main.height = h;
+            const ov = document.getElementById('overlay-canvas');
+            ov.width = w; ov.height = h;
+
+            document.getElementById('resize-w').value = w;
+            document.getElementById('resize-h').value = h;
 
             // Create Background Layer
             const bgCvs = document.createElement('canvas');
             bgCvs.width = w; bgCvs.height = h;
             const ctx = bgCvs.getContext('2d');
-            
+
             if(bg === 'white') {
-                ctx.fillStyle = 'white'; ctx.fillRect(0,0,w,h);
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0,0,w,h);
             } else if (bg === 'black') {
-                ctx.fillStyle = 'black'; ctx.fillRect(0,0,w,h);
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0,0,w,h);
             }
+            // Transparent leaves it empty
 
             App.Layers.addLayer(bgCvs, "Background");
-            
+
             App.UI.closeModal('new-image-modal');
-
-            proj.zoom = Math.min((window.innerWidth-400)/w, (window.innerHeight-100)/h, 1);
-
-            App.UI.renderTabs();
-            App.UI.activateProject(proj.id);
+            App.State.zoom = Math.min((window.innerWidth-400)/w, (window.innerHeight-100)/h, 1);
+            App.UI.updateTransform();
         },
 
         readEXIF(file) {
@@ -1292,12 +1240,11 @@ const App = {
         },
 
         executeSave() {
-            const project = App.getActiveProject();
             const name = document.getElementById('save-name').value;
             const format = document.getElementById('save-format').value;
             const canvas = document.getElementById('main-canvas');
             App.Render.update();
-            
+
             if (format === 'application/pdf') {
                 const { jsPDF } = window.jspdf;
                 const pdf = new jsPDF({ orientation: canvas.width > canvas.height ? 'l' : 'p', unit: 'px', format: [canvas.width, canvas.height] });
@@ -1320,7 +1267,8 @@ const App = {
             area.addEventListener('mousedown', e => this.handleDown(e));
             window.addEventListener('mousemove', e => this.handleMove(e));
             window.addEventListener('mouseup', e => this.handleUp(e));
-            
+
+            // Copy Paste & Spacebar Binding
             window.addEventListener('keydown', e => {
                 if(e.code === 'Space') {
                     App.State.isSpacePressed = true;
@@ -1341,12 +1289,20 @@ const App = {
             });
 
             area.addEventListener('wheel', e => {
-                const project = App.getActiveProject();
-                if(!project) return;
+                if(App.State.layers.length === 0) return;
                 e.preventDefault();
-                const factor = 1.5;
-                if(e.shiftKey) project.pan.x -= e.deltaY * factor;
-                else project.pan.y -= e.deltaY * factor;
+
+                // Pan Logic:
+                // Wheel -> Vertical Pan
+                // Shift+Wheel -> Horizontal Pan
+                const factor = 1.5; // Speed multiplier
+
+                if(e.shiftKey) {
+                     App.State.pan.x -= e.deltaY * factor;
+                } else {
+                     App.State.pan.y -= e.deltaY * factor;
+                }
+
                 App.UI.updateTransform();
             }, { passive: false });
         },
@@ -1359,14 +1315,14 @@ const App = {
         },
 
         handleDown(e) {
-            const project = App.getActiveProject();
-            if(!project) return;
+            if(App.State.layers.length === 0) return;
             const tool = App.State.activeTool;
             const pos = this.getImgPos(e);
 
             if(tool === 'move') {
                 App.State.isDragging = true;
                 App.State.lastMouse = { x: e.clientX, y: e.clientY };
+
                 if(App.State.isSpacePressed) {
                     App.State.dragMode = 'pan';
                     document.getElementById('canvas-area').style.cursor = 'grabbing';
@@ -1376,6 +1332,8 @@ const App = {
                 }
                 return;
             }
+
+            // Hand Tool (Explicit Pan)
             if(tool === 'hand') {
                 App.State.isDragging = true;
                 App.State.lastMouse = { x: e.clientX, y: e.clientY };
@@ -1383,35 +1341,41 @@ const App = {
                 document.getElementById('canvas-area').style.cursor = 'grabbing';
                 return;
             }
-            if(tool === 'text') {
-                App.Layers.addTextLayer(App.State.toolSettings.text, pos.x, pos.y);
-                return;
-            }
 
             if(['rect', 'line', 'arrow', 'sel-rect', 'sel-oval', 'sel-lasso'].includes(tool)) {
                 App.State.isDrawing = true;
                 App.State.drawStart = pos;
-                if(tool === 'sel-lasso') project.selection.tempPath = [pos];
+                if(tool === 'sel-lasso') App.State.selection.tempPath = [pos];
                 return;
             }
-            
+
             if(tool === 'sel-wand') {
                 this.performMagicWand(pos);
             }
 
-            if(tool === 'paint' || tool === 'eraser' || tool === 'sel-brush' || tool === 'smudge') {
+            if(tool === 'paint' || tool === 'eraser') {
                 App.State.isDrawing = true;
                 App.State.lastMouse = pos;
-                if(tool === 'sel-brush') this.paintSelectionBrush(pos);
-                else if(tool === 'smudge') {} // smudge needs movement
-                else this.paintBrush(pos);
+                this.paintBrush(pos);
+            }
+
+            if(tool === 'sel-brush') {
+                App.State.isDrawing = true;
+                App.State.lastMouse = pos;
+                this.paintSelectionBrush(pos);
+            }
+
+            if(tool === 'smudge') {
+                App.State.isDrawing = true;
+                App.State.lastMouse = pos;
+                // Smudge needs movement to work, so just set state on down
             }
 
             if(tool === 'clone') {
                 if(e.altKey) {
                     e.preventDefault();
                     App.State.cloneSource = pos;
-                    App.State.cloneLayerId = project.activeLayerId;
+                    App.State.cloneLayerId = App.State.activeLayerId;
                     const ind = document.getElementById('clone-source-indicator');
                     ind.style.display = 'block';
                     ind.style.left = pos.rawX + 'px';
@@ -1426,23 +1390,28 @@ const App = {
         },
 
         handleMove(e) {
-            const project = App.getActiveProject();
-            if(!project) return;
+            if(App.State.layers.length === 0) return;
             const tool = App.State.activeTool;
             const pos = this.getImgPos(e);
 
+            // Brush Cursor Visibility
             const cur = document.getElementById('clone-cursor');
             if(tool === 'clone' || tool === 'paint' || tool === 'eraser' || tool === 'smudge' || tool === 'sel-brush') {
                 cur.style.display = 'block';
-                cur.style.width = App.State.toolSettings.brushSize * project.zoom + 'px';
-                cur.style.height = App.State.toolSettings.brushSize * project.zoom + 'px';
+                cur.style.width = App.State.toolSettings.brushSize * App.State.zoom + 'px';
+                cur.style.height = App.State.toolSettings.brushSize * App.State.zoom + 'px';
                 cur.style.left = e.clientX - (parseFloat(cur.style.width)/2) + 'px';
                 cur.style.top = e.clientY - (parseFloat(cur.style.height)/2) + 'px';
-                
-                if(tool === 'eraser') { cur.style.borderColor = 'red'; cur.style.borderStyle = 'dashed'; }
-                else if(tool === 'smudge') { cur.style.borderColor = 'cyan'; cur.style.borderStyle = 'solid'; }
-                else if(tool === 'sel-brush') { cur.style.borderColor = '#6366f1'; cur.style.borderStyle = 'dashed'; }
-                else { cur.style.borderColor = 'white'; cur.style.borderStyle = 'solid'; }
+
+                if(tool === 'eraser') {
+                    cur.style.borderColor = 'red'; cur.style.borderStyle = 'dashed';
+                } else if(tool === 'smudge') {
+                    cur.style.borderColor = 'cyan'; cur.style.borderStyle = 'solid';
+                } else if(tool === 'sel-brush') {
+                    cur.style.borderColor = '#6366f1'; cur.style.borderStyle = 'dashed';
+                } else {
+                    cur.style.borderColor = 'white'; cur.style.borderStyle = 'solid';
+                }
             } else {
                 cur.style.display = 'none';
             }
@@ -1450,20 +1419,24 @@ const App = {
             if(App.State.isDragging) {
                 const dx = e.clientX - App.State.lastMouse.x;
                 const dy = e.clientY - App.State.lastMouse.y;
-                
+
                 if(App.State.dragMode === 'pan') {
-                    project.pan.x += dx;
-                    project.pan.y += dy;
+                    App.State.pan.x += dx;
+                    App.State.pan.y += dy;
                     App.UI.updateTransform();
                 } else if (App.State.dragMode === 'layer') {
                     const layer = App.Layers.getActive();
-                    const isBase = project.layers.indexOf(layer) === project.layers.length - 1;
+                    // Check if bottom layer (index length-1 because reversed rendering?)
+                    // Our layers array: 0 is TOP, length-1 is BOTTOM
+                    const isBase = App.State.layers.indexOf(layer) === App.State.layers.length - 1;
+
                     if(layer && !isBase) {
-                        layer.x += dx / project.zoom;
-                        layer.y += dy / project.zoom;
+                        layer.x += dx / App.State.zoom;
+                        layer.y += dy / App.State.zoom;
                         App.Render.update();
                     }
                 }
+
                 App.State.lastMouse = { x: e.clientX, y: e.clientY };
                 return;
             }
@@ -1471,16 +1444,16 @@ const App = {
             if(App.State.isDrawing) {
                 const ctx = document.getElementById('overlay-canvas').getContext('2d');
                 ctx.clearRect(0,0, ctx.canvas.width, ctx.canvas.height);
-                if(project.selection.active) App.Render.update();
+                if(App.State.selection.active) App.Render.update();
 
                 if(['rect', 'line', 'arrow'].includes(tool)) this.drawShape(ctx, App.State.drawStart, pos, tool, true);
                 else if(tool === 'sel-rect') this.drawSelectionShape(ctx, App.State.drawStart, pos, 'rect');
                 else if(tool === 'sel-oval') this.drawSelectionShape(ctx, App.State.drawStart, pos, 'oval');
                 else if(tool === 'sel-lasso') {
-                    project.selection.tempPath.push(pos);
-                    this.drawSelectionLasso(ctx, project.selection.tempPath);
+                    App.State.selection.tempPath.push(pos);
+                    this.drawSelectionLasso(ctx, App.State.selection.tempPath);
                 }
-                else if (['paint','eraser','sel-brush','smudge','clone'].includes(tool)) {
+                else if (tool === 'paint' || tool === 'eraser') {
                     const last = App.State.lastMouse;
                     const dist = Math.hypot(pos.x - last.x, pos.y - last.y);
                     const step = Math.max(1, App.State.toolSettings.brushSize * 0.1);
@@ -1490,19 +1463,60 @@ const App = {
                             const t = i / steps;
                             const x = last.x + (pos.x - last.x) * t;
                             const y = last.y + (pos.y - last.y) * t;
-                            if(tool === 'smudge') {
-                                this.paintSmudge(last, {x, y});
-                                last = {x,y}; // smudge needs updated last pos
-                            }
-                            else if (tool === 'clone') this.paintClone({x, y});
-                            else if (tool === 'sel-brush') this.paintSelectionBrush({x, y});
-                            else this.paintBrush({x, y});
+                            this.paintBrush({x, y});
                         }
                     }
-                    if(tool === 'smudge') this.paintSmudge(last, pos);
-                    else if (tool === 'clone') this.paintClone(pos);
-                    else if (tool === 'sel-brush') this.paintSelectionBrush(pos);
-                    else this.paintBrush(pos);
+                    this.paintBrush(pos);
+                    App.State.lastMouse = pos;
+                }
+                else if (tool === 'sel-brush') {
+                    const last = App.State.lastMouse;
+                    const dist = Math.hypot(pos.x - last.x, pos.y - last.y);
+                    const step = Math.max(1, App.State.toolSettings.brushSize * 0.1);
+                    if (dist > step) {
+                        const steps = dist / step;
+                        for (let i = 0; i < steps; i++) {
+                            const t = i / steps;
+                            const x = last.x + (pos.x - last.x) * t;
+                            const y = last.y + (pos.y - last.y) * t;
+                            this.paintSelectionBrush({x, y});
+                        }
+                    }
+                    this.paintSelectionBrush(pos);
+                    App.State.lastMouse = pos;
+                }
+                else if (tool === 'smudge') {
+                    let last = App.State.lastMouse;
+                    const dist = Math.hypot(pos.x - last.x, pos.y - last.y);
+                    const step = Math.max(1, App.State.toolSettings.brushSize * 0.15); // Slightly larger step for performance
+                    if (dist > step) {
+                        const steps = dist / step;
+                        for (let i = 0; i < steps; i++) {
+                            const t = i / steps;
+                            const x = last.x + (pos.x - last.x) * t;
+                            const y = last.y + (pos.y - last.y) * t;
+                            // Smudge from 'last' to 'current interpolated'
+                            this.paintSmudge(last, {x, y});
+                            last = {x, y}; // Update tracker
+                        }
+                    }
+                    this.paintSmudge(last, pos);
+                    App.State.lastMouse = pos;
+                }
+                else if (tool === 'clone') {
+                    const last = App.State.lastMouse;
+                    const dist = Math.hypot(pos.x - last.x, pos.y - last.y);
+                    const step = Math.max(1, App.State.toolSettings.brushSize * 0.1);
+                    if (dist > step) {
+                        const steps = dist / step;
+                        for (let i = 0; i < steps; i++) {
+                            const t = i / steps;
+                            const x = last.x + (pos.x - last.x) * t;
+                            const y = last.y + (pos.y - last.y) * t;
+                            this.paintClone({x, y});
+                        }
+                    }
+                    this.paintClone(pos);
                     App.State.lastMouse = pos;
                 }
             }
@@ -1511,7 +1525,7 @@ const App = {
         handleUp(e) {
             App.State.isDragging = false;
             document.getElementById('canvas-area').style.cursor = '';
-            
+
             if(App.State.activeTool === 'move' && App.State.dragMode === 'layer') {
                 App.History.push();
             }
@@ -1520,8 +1534,7 @@ const App = {
                 App.State.isDrawing = false;
                 const tool = App.State.activeTool;
                 const pos = this.getImgPos(e);
-                const project = App.getActiveProject();
-                
+
                 if(['rect', 'line', 'arrow'].includes(tool)) {
                     const layer = App.Layers.getActive();
                     if(layer) {
@@ -1533,8 +1546,8 @@ const App = {
                 }
                 else if(tool === 'sel-rect') this.createSelectionMask('rect', App.State.drawStart, pos);
                 else if(tool === 'sel-oval') this.createSelectionMask('oval', App.State.drawStart, pos);
-                else if(tool === 'sel-lasso') this.createSelectionMask('lasso', null, null, project.selection.tempPath);
-                else if (['paint','eraser','clone','smudge'].includes(tool)) {
+                else if(tool === 'sel-lasso') this.createSelectionMask('lasso', null, null, App.State.selection.tempPath);
+                else if (tool === 'clone' || tool === 'paint' || tool === 'eraser' || tool === 'smudge') {
                     const layer = App.Layers.getActive();
                     if(layer) App.Filters.renderLayer(layer);
                     App.UI.renderLayerList();
@@ -1546,87 +1559,105 @@ const App = {
             }
         },
 
+        // ... existing helpers ...
+
         paintSelectionBrush(pos) {
-            const project = App.getActiveProject();
-            if (!project.selection.active || !project.selection.mask) {
+            // Ensure mask exists
+            if (!App.State.selection.active || !App.State.selection.mask) {
                 const mask = document.createElement('canvas');
-                mask.width = project.width; mask.height = project.height;
-                project.selection = { active: true, mask: mask, type: 'brush' };
+                mask.width = App.State.width;
+                mask.height = App.State.height;
+                App.State.selection = { active: true, mask: mask, type: 'brush' };
             }
-            
-            const ctx = project.selection.mask.getContext('2d');
+
+            const ctx = App.State.selection.mask.getContext('2d');
             const settings = App.State.toolSettings;
             const size = settings.brushSize;
+            const hardness = settings.brushHardness;
             const rad = size / 2;
 
+            // Brush tip
             const brush = document.createElement('canvas');
             brush.width = size; brush.height = size;
             const bCtx = brush.getContext('2d');
-            
-            const gradient = bCtx.createRadialGradient(rad, rad, rad * (settings.brushHardness / 100), rad, rad, rad);
+
+            const gradient = bCtx.createRadialGradient(rad, rad, rad * (hardness / 100), rad, rad, rad);
+            // Use opacity setting for selection strength (white alpha)
             const alpha = settings.brushOpacity / 100;
             gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
             gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-            
+
             bCtx.fillStyle = gradient;
             bCtx.fillRect(0, 0, size, size);
-            
+
             ctx.save();
-            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalCompositeOperation = 'source-over'; // Add to selection
             ctx.drawImage(brush, pos.x - rad, pos.y - rad);
             ctx.restore();
-            
+
             App.Render.update();
         },
 
         paintSmudge(fromPos, toPos) {
             const layer = App.Layers.getActive();
             if(!layer) return;
-            const project = App.getActiveProject();
 
             const ctx = layer.canvas.getContext('2d');
             const oCtx = layer.originalCanvas.getContext('2d');
             const settings = App.State.toolSettings;
             const size = settings.brushSize;
             const rad = size / 2;
-            
+
+            // 1. Capture pixels from the START position (the "finger" touches here)
+            // We grab from the visual canvas (layer.canvas) to include current edits
             const brushSource = document.createElement('canvas');
             brushSource.width = size; brushSource.height = size;
             const sCtx = brushSource.getContext('2d');
-            
+
+            // Draw layer content into brush source (relative to fromPos)
             sCtx.drawImage(layer.canvas, fromPos.x - rad, fromPos.y - rad, size, size, 0, 0, size, size);
+
+            // 2. Apply Hardness (Alpha Mask) to the captured source
             sCtx.globalCompositeOperation = 'destination-in';
             const gradient = sCtx.createRadialGradient(rad, rad, rad * (settings.brushHardness/100), rad, rad, rad);
-            gradient.addColorStop(0, 'rgba(0,0,0,1)'); 
-            gradient.addColorStop(1, 'rgba(0,0,0,0)'); 
+            gradient.addColorStop(0, 'rgba(0,0,0,1)');
+            gradient.addColorStop(1, 'rgba(0,0,0,0)');
             sCtx.fillStyle = gradient;
             sCtx.fillRect(0, 0, size, size);
 
+            // 3. Draw the captured "smudge" onto the DESTINATION position
+            // This creates the dragging effect. We draw with low opacity to blend.
             const paintOp = (targetCtx) => {
                 targetCtx.save();
-                targetCtx.globalAlpha = settings.brushOpacity / 100;
-                
-                if(project.selection.active && project.selection.mask) {
+                targetCtx.globalAlpha = settings.brushOpacity / 100; // Strength
+
+                // If selection exists, mask the drawing area
+                if(App.State.selection.active && App.State.selection.mask) {
                     const temp = document.createElement('canvas');
                     temp.width = size; temp.height = size;
                     const t = temp.getContext('2d');
+
                     t.drawImage(brushSource, 0, 0);
                     t.globalCompositeOperation = 'destination-in';
-                    t.drawImage(project.selection.mask, -(toPos.x - rad), -(toPos.y - rad));
+                    // Mask relative to destination
+                    t.drawImage(App.State.selection.mask, -(toPos.x - rad), -(toPos.y - rad));
+
                     targetCtx.drawImage(temp, toPos.x - rad, toPos.y - rad);
                 } else {
                     targetCtx.drawImage(brushSource, toPos.x - rad, toPos.y - rad);
                 }
                 targetCtx.restore();
             };
-            paintOp(ctx); paintOp(oCtx);
+
+            paintOp(ctx);
+            paintOp(oCtx);
+
             App.Render.update();
         },
 
         paintBrush(destPos) {
             const layer = App.Layers.getActive();
             if(!layer) return;
-            const project = App.getActiveProject();
 
             const ctx = layer.canvas.getContext('2d');
             const oCtx = layer.originalCanvas.getContext('2d');
@@ -1636,31 +1667,34 @@ const App = {
             const color = settings.drawColor;
             const isEraser = App.State.activeTool === 'eraser';
 
+            // Create Brush Tip (Radial Gradient)
             const brushCvs = document.createElement('canvas');
             brushCvs.width = size; brushCvs.height = size;
             const bCtx = brushCvs.getContext('2d');
-            
+
             const r = parseInt(color.slice(1, 3), 16);
             const g = parseInt(color.slice(3, 5), 16);
             const b = parseInt(color.slice(5, 7), 16);
-            
+
             const gradient = bCtx.createRadialGradient(rad, rad, rad * (settings.brushHardness/100), rad, rad, rad);
             gradient.addColorStop(0, `rgba(${r},${g},${b},1)`);
             gradient.addColorStop(1, `rgba(${r},${g},${b},0)`);
-            
+
             bCtx.fillStyle = gradient;
             bCtx.fillRect(0, 0, size, size);
 
+            // Helper to draw with mask
             const drawTo = (targetCtx) => {
-                if(project.selection.active && project.selection.mask) {
+                if(App.State.selection.active && App.State.selection.mask) {
                     const temp = document.createElement('canvas');
                     temp.width = size; temp.height = size;
                     const t = temp.getContext('2d');
                     t.drawImage(brushCvs, 0, 0);
                     t.globalCompositeOperation = 'destination-in';
-                    t.drawImage(project.selection.mask, -(destPos.x - rad), -(destPos.y - rad));
-                    
+                    t.drawImage(App.State.selection.mask, -(destPos.x - rad), -(destPos.y - rad));
+
                     targetCtx.save();
+                    // If erasing, use destination-out
                     if(isEraser) targetCtx.globalCompositeOperation = 'destination-out';
                     targetCtx.globalAlpha = settings.brushOpacity / 100;
                     targetCtx.drawImage(temp, destPos.x - rad, destPos.y - rad);
@@ -1673,28 +1707,31 @@ const App = {
                     targetCtx.restore();
                 }
             };
-            drawTo(ctx); drawTo(oCtx);
+
+            drawTo(ctx);
+            drawTo(oCtx);
+
             App.Render.update();
         },
 
         applyDrawToLayer(layer, drawFn) {
-            const project = App.getActiveProject();
             const ctx = layer.canvas.getContext('2d');
             const oCtx = layer.originalCanvas.getContext('2d');
-            if(project.selection.active && project.selection.mask) {
+            if(App.State.selection.active && App.State.selection.mask) {
                 const temp = document.createElement('canvas');
                 temp.width = layer.canvas.width; temp.height = layer.canvas.height;
                 const tCtx = temp.getContext('2d');
-                drawFn(tCtx); 
+                drawFn(tCtx);
                 tCtx.globalCompositeOperation = 'destination-in';
-                tCtx.drawImage(project.selection.mask, 0, 0);
+                tCtx.drawImage(App.State.selection.mask, 0, 0);
                 ctx.drawImage(temp, 0, 0);
                 oCtx.drawImage(temp, 0, 0);
             } else {
-                drawFn(ctx); drawFn(oCtx);
+                drawFn(ctx);
+                drawFn(oCtx);
             }
         },
-        
+
         drawShape(ctx, start, end, type, isPreview) {
             ctx.beginPath();
             ctx.strokeStyle = App.State.toolSettings.drawColor;
@@ -1703,7 +1740,7 @@ const App = {
             if(type === 'rect') ctx.rect(start.x, start.y, end.x - start.x, end.y - start.y);
             else if (type === 'line') { ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y); }
             else if (type === 'arrow') {
-                const headlen = App.State.toolSettings.drawSize * 4; 
+                const headlen = App.State.toolSettings.drawSize * 4;
                 const dx = end.x - start.x; const dy = end.y - start.y; const angle = Math.atan2(dy, dx);
                 ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y);
                 ctx.lineTo(end.x - headlen * Math.cos(angle - Math.PI / 6), end.y - headlen * Math.sin(angle - Math.PI / 6));
@@ -1739,9 +1776,8 @@ const App = {
         },
 
         createSelectionMask(type, start, end, path) {
-            const project = App.getActiveProject();
             const mask = document.createElement('canvas');
-            mask.width = project.width; mask.height = project.height;
+            mask.width = App.State.width; mask.height = App.State.height;
             const ctx = mask.getContext('2d');
             ctx.fillStyle = 'white'; ctx.beginPath();
             let pathFunc = null;
@@ -1763,14 +1799,13 @@ const App = {
                 pathFunc = (c) => { c.moveTo(path[0].x, path[0].y); for(let i=1; i<path.length; i++) c.lineTo(path[i].x, path[i].y); c.closePath(); }
             }
             ctx.fill();
-            project.selection = { active: true, mask: mask, type: type, pathFunc: pathFunc };
+            App.State.selection = { active: true, mask: mask, type: type, pathFunc: pathFunc };
             App.Render.update();
         },
 
         performMagicWand(pos) {
             const layer = App.Layers.getActive();
             if(!layer) return;
-            const project = App.getActiveProject();
             const ctx = layer.canvas.getContext('2d');
             const w = layer.canvas.width; const h = layer.canvas.height;
             const imgData = ctx.getImageData(0, 0, w, h);
@@ -1779,14 +1814,14 @@ const App = {
             if(tx<0||tx>=w||ty<0||ty>=h) return;
             const ti = (ty*w + tx)*4;
             const tr=data[ti], tg=data[ti+1], tb=data[ti+2], ta=data[ti+3];
-            const tol = project.selection.wandTolerance || 30;
+            const tol = App.State.selection.wandTolerance || 30;
             const mask = document.createElement('canvas');
             mask.width = w; mask.height = h;
             const mCtx = mask.getContext('2d');
             const mData = mCtx.createImageData(w, h);
             const m = mData.data;
             const stack = [ti];
-            const seen = new Uint8Array(w*h); 
+            const seen = new Uint8Array(w*h);
             seen[ty*w+tx] = 1;
             while(stack.length) {
                 const i = stack.pop();
@@ -1803,41 +1838,39 @@ const App = {
                 }
             }
             mCtx.putImageData(mData, 0, 0);
-            project.selection = { active: true, mask: mask, type: 'wand' };
+            App.State.selection = { active: true, mask: mask, type: 'wand' };
             App.Render.update();
         },
 
         invertSelection() {
-            const project = App.getActiveProject();
-            if(!project.selection.active || !project.selection.mask) return;
-            const ctx = project.selection.mask.getContext('2d');
+            if(!App.State.selection.active || !App.State.selection.mask) return;
+            const ctx = App.State.selection.mask.getContext('2d');
             ctx.globalCompositeOperation = 'source-out';
             ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, project.width, project.height);
-            project.selection.pathFunc = null;
+            ctx.fillRect(0, 0, App.State.width, App.State.height);
+            App.State.selection.pathFunc = null;
             App.Render.update();
         },
 
         clearSelection() {
-            const project = App.getActiveProject();
-            if(!project) return;
-            project.selection = { active: false, mask: null, type: null };
+            App.State.selection = { active: false, mask: null, type: null };
             App.Render.update();
         },
 
         copySelection() {
             const layer = App.Layers.getActive();
-            const project = App.getActiveProject();
-            if(!layer || !project) return;
+            if(!layer) return;
             const temp = document.createElement('canvas');
-            temp.width = project.width; temp.height = project.height;
+            temp.width = App.State.width; temp.height = App.State.height;
             const ctx = temp.getContext('2d');
             ctx.drawImage(layer.canvas, 0, 0);
-            if(project.selection.active && project.selection.mask) {
+            if(App.State.selection.active && App.State.selection.mask) {
                 ctx.globalCompositeOperation = 'destination-in';
-                ctx.drawImage(project.selection.mask, 0, 0);
+                ctx.drawImage(App.State.selection.mask, 0, 0);
             }
-            App.State.clipboard = temp; // Global clipboard
+            App.State.clipboard = temp;
+            const btn = document.getElementById('btn-copy');
+            if(btn) { const orig = btn.innerHTML; btn.innerHTML = '<i class="ph ph-check"></i>'; setTimeout(()=> btn.innerHTML = orig, 1000); }
         },
 
         pasteSelection() {
@@ -1846,10 +1879,10 @@ const App = {
         },
 
         paintClone(destPos) {
+            // ... clone logic respecting mask ...
             const layer = App.Layers.getActive();
             if(!layer || !App.State.cloneOffset) return;
-            const project = App.getActiveProject();
-            const sourceLayer = project.layers.find(l => l.id === App.State.cloneLayerId);
+            const sourceLayer = App.State.layers.find(l => l.id === App.State.cloneLayerId);
             if(!sourceLayer) return;
             const ctx = layer.canvas.getContext('2d');
             const oCtx = layer.originalCanvas.getContext('2d');
@@ -1858,14 +1891,9 @@ const App = {
             const rad = size / 2;
             const srcX = destPos.x - App.State.cloneOffset.x;
             const srcY = destPos.y - App.State.cloneOffset.y;
-            
+
             const ind = document.getElementById('clone-source-indicator');
-            if(ind) {
-                const canvas = document.getElementById('main-canvas');
-                const rect = canvas.getBoundingClientRect();
-                ind.style.left = (rect.left + srcX * (rect.width / canvas.width)) + 'px';
-                ind.style.top = (rect.top + srcY * (rect.height / canvas.height)) + 'px';
-            }
+            if(ind) { ind.style.left = (document.getElementById('main-canvas').getBoundingClientRect().left + srcX * (document.getElementById('main-canvas').getBoundingClientRect().width / document.getElementById('main-canvas').width)) + 'px'; ind.style.top = (document.getElementById('main-canvas').getBoundingClientRect().top + srcY * (document.getElementById('main-canvas').getBoundingClientRect().height / document.getElementById('main-canvas').height)) + 'px'; }
 
             const brushCvsVis = document.createElement('canvas'); brushCvsVis.width = size; brushCvsVis.height = size; const bCtxVis = brushCvsVis.getContext('2d');
             bCtxVis.drawImage(sourceLayer.canvas, srcX - rad, srcY - rad, size, size, 0, 0, size, size);
@@ -1873,21 +1901,22 @@ const App = {
             bCtxRaw.drawImage(sourceLayer.originalCanvas, srcX - rad, srcY - rad, size, size, 0, 0, size, size);
 
             const gradient = bCtxVis.createRadialGradient(rad, rad, rad * (settings.brushHardness/100), rad, rad, rad);
-            gradient.addColorStop(0, 'rgba(0,0,0,1)'); gradient.addColorStop(1, 'rgba(0,0,0,0)'); 
+            gradient.addColorStop(0, 'rgba(0,0,0,1)'); gradient.addColorStop(1, 'rgba(0,0,0,0)');
             [bCtxVis, bCtxRaw].forEach(c => { c.globalCompositeOperation = 'destination-in'; c.fillStyle = gradient; c.fillRect(0, 0, size, size); });
 
             const applyWithMask = (targetCtx, brush) => {
-                if(project.selection.active && project.selection.mask) {
+                if(App.State.selection.active && App.State.selection.mask) {
                     const temp = document.createElement('canvas'); temp.width = size; temp.height = size; const t = temp.getContext('2d');
                     t.drawImage(brush, 0, 0);
                     t.globalCompositeOperation = 'destination-in';
-                    t.drawImage(project.selection.mask, -(destPos.x - rad), -(destPos.y - rad));
+                    t.drawImage(App.State.selection.mask, -(destPos.x - rad), -(destPos.y - rad));
                     targetCtx.save(); targetCtx.globalAlpha = settings.brushOpacity / 100; targetCtx.drawImage(temp, destPos.x - rad, destPos.y - rad); targetCtx.restore();
                 } else {
                     targetCtx.save(); targetCtx.globalAlpha = settings.brushOpacity / 100; targetCtx.drawImage(brush, destPos.x - rad, destPos.y - rad); targetCtx.restore();
                 }
             };
-            applyWithMask(ctx, brushCvsVis); applyWithMask(oCtx, brushCvsRaw);
+            applyWithMask(ctx, brushCvsVis);
+            applyWithMask(oCtx, brushCvsRaw);
             App.Render.update();
         }
     },
@@ -1897,11 +1926,15 @@ const App = {
         init() {
             App.IO.init();
             App.Tools.init();
-            App.UI.setupMenus();
+            App.UI.setupMenus(); // Initialize click-based menus
 
             document.querySelectorAll('.tool-btn[data-tool]').forEach(b => {
                 b.addEventListener('click', () => this.selectTool(b.dataset.tool));
             });
+
+            // REMOVE THESE LINES
+            // document.getElementById('btn-undo').addEventListener('click', () => App.History.undo());
+            // document.getElementById('btn-redo').addEventListener('click', () => App.History.redo());
 
             document.querySelectorAll('button[data-cmd]').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -1920,7 +1953,7 @@ const App = {
                    }
                 });
             });
-            
+
             document.querySelectorAll('input[data-filter]').forEach(input => {
                 input.addEventListener('input', (e) => {
                     const key = e.target.dataset.filter;
@@ -1935,91 +1968,53 @@ const App = {
                     App.Filters.apply(key, val);
                 });
             });
-
-            // Initial Project
-            App.IO.createNewProject();
         },
 
         setupMenus() {
+            // Toggle open class on click
             document.querySelectorAll('.dropdown-trigger').forEach(trigger => {
                 trigger.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const parent = trigger.parentElement;
+                    // Close all others
                     document.querySelectorAll('.dropdown').forEach(d => {
                         if (d !== parent) d.classList.remove('open');
                     });
                     parent.classList.toggle('open');
                 });
             });
+
+            // Close all menus when clicking outside
             window.addEventListener('click', () => {
                 document.querySelectorAll('.dropdown').forEach(d => d.classList.remove('open'));
             });
         },
 
-        renderTabs() {
-            const bar = document.getElementById('tab-bar');
-            bar.innerHTML = '';
-            App.State.projects.forEach(p => {
-                const el = document.createElement('div');
-                el.className = `tab ${p.id === App.State.activeProjectId ? 'active' : ''}`;
-                el.innerHTML = `<span>${p.filename}</span> <i class="ph ph-x tab-close" onclick="App.UI.closeProject('${p.id}', event)"></i>`;
-                el.onclick = () => App.UI.activateProject(p.id);
-                bar.appendChild(el);
-            });
+        openNewModal() {
+            document.getElementById('new-image-modal').classList.add('open');
         },
 
-        activateProject(id) {
-            App.State.activeProjectId = id;
-            this.renderTabs();
-            const project = App.getActiveProject();
-            if(project) {
-                // Resize canvases
-                const main = document.getElementById('main-canvas');
-                main.width = project.width; main.height = project.height;
-                const ov = document.getElementById('overlay-canvas');
-                ov.width = project.width; ov.height = project.height;
-
-                this.updateFilename(project.filename);
-                this.updateTransform();
-                App.Render.update();
-                this.renderLayerList();
-                this.syncControls();
-            }
+        closeModal(id) {
+            document.getElementById(id).classList.remove('open');
         },
 
-        closeProject(id, e) {
-            e.stopPropagation();
-            if(App.State.projects.length === 1) {
-                alert("Cannot close the last tab."); return;
-            }
-            const idx = App.State.projects.findIndex(p => p.id === id);
-            App.State.projects.splice(idx, 1);
-
-            if(App.State.activeProjectId === id) {
-                // Switch to another
-                const next = App.State.projects[Math.max(0, idx - 1)];
-                this.activateProject(next.id);
-            } else {
-                this.renderTabs();
-            }
+        openSaveModal() {
+            if(App.State.layers.length === 0) return;
+            document.getElementById('save-name').value = App.State.filename.replace(/\.[^/.]+$/, "") + "-edit";
+            document.getElementById('save-modal').classList.add('open');
         },
 
-        openNewModal() { document.getElementById('new-image-modal').classList.add('open'); },
-        closeModal(id) { document.getElementById(id).classList.remove('open'); },
-        openSaveModal() { document.getElementById('save-name').value = App.getActiveProject().filename + "-edit"; document.getElementById('save-modal').classList.add('open'); },
-        openRotateModal() { document.getElementById('custom-rot-val-modal').value = 0; document.getElementById('rotate-modal').classList.add('open'); },
+        openRotateModal() {
+            if(App.State.layers.length === 0) return;
+            document.getElementById('custom-rot-val').value = 0;
+            document.getElementById('rotate-modal').classList.add('open');
+        },
+
         openResizeModal() {
-            const p = App.getActiveProject();
-            document.getElementById('resize-w').value = p.width;
-            document.getElementById('resize-h').value = p.height;
+            if(App.State.layers.length === 0) return;
+            document.getElementById('resize-w').value = App.State.width;
+            document.getElementById('resize-h').value = App.State.height;
             document.getElementById('resize-modal').classList.add('open');
-        },
-        openResizeLayerModal() {
-            const layer = App.Layers.getActive();
-            if(!layer) return;
-            document.getElementById('resize-layer-w').value = layer.canvas.width;
-            document.getElementById('resize-layer-h').value = layer.canvas.height;
-            document.getElementById('resize-layer-modal').classList.add('open');
         },
 
         syncControls() {
@@ -2051,18 +2046,17 @@ const App = {
             if(btn) btn.classList.add('active');
 
             const canvasWrap = document.getElementById('canvas-wrapper');
-            canvasWrap.className = ''; 
+            canvasWrap.className = '';
             if(tool === 'clone') canvasWrap.classList.add('is-cloning');
-            if(['rect', 'line', 'arrow', 'text'].includes(tool)) canvasWrap.classList.add('is-drawing');
-            if(['sel-rect', 'sel-oval', 'sel-lasso', 'sel-wand'].includes(tool)) canvasWrap.classList.add('is-selecting');
-            if(tool === 'text') document.getElementById('canvas-area').style.cursor = 'text';
+            if(['rect', 'line', 'arrow'].includes(tool)) canvasWrap.classList.add('is-drawing');
+            if(['sel-rect', 'sel-oval', 'sel-lasso'].includes(tool)) canvasWrap.classList.add('is-selecting');
+            if(tool === 'sel-wand') canvasWrap.classList.add('is-selecting');
 
-            const project = App.getActiveProject();
             if(tool === 'crop') this.startCrop();
             else {
-                if(project && project.cropper) {
-                    project.cropper.destroy();
-                    project.cropper = null;
+                if(App.State.cropper) {
+                    App.State.cropper.destroy();
+                    App.State.cropper = null;
                     document.getElementById('cropper-img').style.display = 'none';
                     document.getElementById('main-canvas').style.display = 'block';
                 }
@@ -2073,43 +2067,12 @@ const App = {
         renderToolOptions(tool) {
             const panel = document.getElementById('tool-options-panel');
             const content = document.getElementById('tool-options-content');
-            
+
             if(tool === 'move') { panel.style.display = 'none'; return; }
             panel.style.display = 'block';
             let html = '';
 
-            if (tool === 'text') {
-                html += `
-                    <div class="control-group">
-                        <label>Text Content</label>
-                        <textarea id="opt-txt-content">${App.State.toolSettings.text.content}</textarea>
-                    </div>
-                    <div class="control-group">
-                        <label>Font Family</label>
-                        <select id="opt-txt-font">
-                            <option value="Inter" ${App.State.toolSettings.text.fontFamily==='Inter'?'selected':''}>Inter (Sans)</option>
-                            <option value="Times New Roman" ${App.State.toolSettings.text.fontFamily==='Times New Roman'?'selected':''}>Times (Serif)</option>
-                            <option value="Courier New" ${App.State.toolSettings.text.fontFamily==='Courier New'?'selected':''}>Courier (Mono)</option>
-                            <option value="Brush Script MT" ${App.State.toolSettings.text.fontFamily==='Brush Script MT'?'selected':''}>Brush Script (Cursive)</option>
-                        </select>
-                    </div>
-                    <div class="control-group">
-                        <label>Font Size</label>
-                        <input type="range" id="opt-txt-size" min="8" max="72" value="${App.State.toolSettings.text.fontSize}">
-                        <span id="lbl-txt-size">${App.State.toolSettings.text.fontSize}px</span>
-                    </div>
-                    <div class="control-group">
-                         <label>Color</label>
-                         <input type="color" id="opt-txt-color" value="${App.State.toolSettings.text.color}">
-                    </div>
-                    <div class="btn-grid">
-                        <button class="btn ${App.State.toolSettings.text.bold?'active':''}" id="opt-txt-bold"><b>B</b></button>
-                        <button class="btn ${App.State.toolSettings.text.italic?'active':''}" id="opt-txt-italic"><i>I</i></button>
-                        <button class="btn ${App.State.toolSettings.text.underline?'active':''}" id="opt-txt-under"><u>U</u></button>
-                    </div>
-                    <div style="font-size:11px; margin-top:10px; color:#888;">Click on canvas to add text.</div>
-                `;
-            } else if(['rect', 'line', 'arrow'].includes(tool)) {
+            if(['rect', 'line', 'arrow'].includes(tool)) {
                 html += `
                     <div class="control-group"><div class="control-label"><span>Color</span></div><input type="color" id="opt-color" value="${App.State.toolSettings.drawColor}"></div>
                     <div class="control-group"><div class="control-label"><span>Thickness</span></div><input type="number" id="opt-size" value="${App.State.toolSettings.drawSize}" min="1" max="50"></div>
@@ -2121,26 +2084,47 @@ const App = {
                     <div class="control-group"><div class="control-label"><span>Hardness</span> <span id="lbl-bhard">${App.State.toolSettings.brushHardness}%</span></div><input type="range" id="opt-brush-hard" value="${App.State.toolSettings.brushHardness}" min="0" max="100"></div>
                     <div class="control-group"><div class="control-label"><span>Opacity</span> <span id="lbl-bopac">${App.State.toolSettings.brushOpacity}%</span></div><input type="range" id="opt-brush-opac" value="${App.State.toolSettings.brushOpacity}" min="1" max="100"></div>
                 `;
-            } else if (tool === 'eraser' || tool === 'smudge' || tool === 'clone') {
+            } else if (tool === 'eraser') {
                 html += `
                     <div class="control-group"><div class="control-label"><span>Size</span> <span id="lbl-bsize">${App.State.toolSettings.brushSize}px</span></div><input type="range" id="opt-brush-size" value="${App.State.toolSettings.brushSize}" min="5" max="999"></div>
                     <div class="control-group"><div class="control-label"><span>Hardness</span> <span id="lbl-bhard">${App.State.toolSettings.brushHardness}%</span></div><input type="range" id="opt-brush-hard" value="${App.State.toolSettings.brushHardness}" min="0" max="100"></div>
                     <div class="control-group"><div class="control-label"><span>Opacity</span> <span id="lbl-bopac">${App.State.toolSettings.brushOpacity}%</span></div><input type="range" id="opt-brush-opac" value="${App.State.toolSettings.brushOpacity}" min="1" max="100"></div>
                 `;
-                if(tool==='clone') html += `<div style="font-size:11px; color:#888;">Hold Alt + Click to set source.</div>`;
+            } else if (tool === 'smudge') {
+                html += `
+                    <div class="control-group"><div class="control-label"><span>Brush Size</span> <span id="lbl-bsize">${App.State.toolSettings.brushSize}px</span></div><input type="range" id="opt-brush-size" value="${App.State.toolSettings.brushSize}" min="5" max="999"></div>
+                    <div class="control-group"><div class="control-label"><span>Hardness</span> <span id="lbl-bhard">${App.State.toolSettings.brushHardness}%</span></div><input type="range" id="opt-brush-hard" value="${App.State.toolSettings.brushHardness}" min="0" max="100"></div>
+                    <div class="control-group"><div class="control-label"><span>Strength</span> <span id="lbl-bopac">${App.State.toolSettings.brushOpacity}%</span></div><input type="range" id="opt-brush-opac" value="${App.State.toolSettings.brushOpacity}" min="1" max="100"></div>
+                `;
+            } else if (tool === 'clone') {
+                html += `
+                    <div class="control-group"><div class="control-label"><span>Brush Size</span> <span id="lbl-bsize">${App.State.toolSettings.brushSize}px</span></div><input type="range" id="opt-brush-size" value="${App.State.toolSettings.brushSize}" min="5" max="999"></div>
+                    <div class="control-group"><div class="control-label"><span>Hardness</span> <span id="lbl-bhard">${App.State.toolSettings.brushHardness}%</span></div><input type="range" id="opt-brush-hard" value="${App.State.toolSettings.brushHardness}" min="0" max="100"></div>
+                    <div class="control-group"><div class="control-label"><span>Opacity</span> <span id="lbl-bopac">${App.State.toolSettings.brushOpacity}%</span></div><input type="range" id="opt-brush-opac" value="${App.State.toolSettings.brushOpacity}" min="1" max="100"></div>
+                    <div style="font-size:11px; color:#888;">Hold Alt + Click to set source.</div>
+                `;
             } else if (tool === 'sel-brush') {
                 html += `
                     <div class="control-group"><div class="control-label"><span>Size</span> <span id="lbl-bsize">${App.State.toolSettings.brushSize}px</span></div><input type="range" id="opt-brush-size" value="${App.State.toolSettings.brushSize}" min="5" max="999"></div>
-                    <div class="control-group"><div class="control-label"><span>Opacity</span> <span id="lbl-bopac">${App.State.toolSettings.brushOpacity}%</span></div><input type="range" id="opt-brush-opac" value="${App.State.toolSettings.brushOpacity}" min="1" max="100"></div>
+                    <div class="control-group"><div class="control-label"><span>Hardness</span> <span id="lbl-bhard">${App.State.toolSettings.brushHardness}%</span></div><input type="range" id="opt-brush-hard" value="${App.State.toolSettings.brushHardness}" min="0" max="100"></div>
+                    <div class="control-group"><div class="control-label"><span>Opacity (Strength)</span> <span id="lbl-bopac">${App.State.toolSettings.brushOpacity}%</span></div><input type="range" id="opt-brush-opac" value="${App.State.toolSettings.brushOpacity}" min="1" max="100"></div>
+                    <div class="btn-grid" style="margin-top:10px;">
+                        <button class="btn" onclick="App.Tools.invertSelection()"><i class="ph ph-swap"></i> Invert</button>
+                        <button class="btn" onclick="App.Tools.clearSelection()"><i class="ph ph-x"></i> Deselect</button>
+                    </div>
                 `;
-            } else if (tool === 'sel-wand') {
-                const project = App.getActiveProject();
-                html += `<div class="control-group"><div class="control-label"><span>Tolerance</span> <span id="lbl-tol">${project.selection.wandTolerance || 30}</span></div><input type="range" id="opt-tol" value="${project.selection.wandTolerance || 30}" min="0" max="255"></div>`;
+            } else if (['sel-rect', 'sel-oval', 'sel-lasso', 'sel-wand'].includes(tool)) {
+                // Removed Copy/Paste buttons as they are now in the Edit menu
+                if(tool === 'sel-wand') {
+                    html += `<div class="control-group"><div class="control-label"><span>Tolerance</span> <span id="lbl-tol">${App.State.selection.wandTolerance || 30}</span></div><input type="range" id="opt-tol" value="${App.State.selection.wandTolerance || 30}" min="0" max="255"></div>`;
+                } else {
+                    html += `<div style="font-size:12px; color:#888;">Draw to select area. Use 'Edit' menu for options.</div>`;
+                }
             } else if (tool === 'crop') {
                 html += `<button class="btn btn-primary" onclick="App.UI.applyCrop()">Apply Crop</button>`;
             } else if (tool === 'zoom') {
-                const project = App.getActiveProject();
-                const currentZoom = Math.round(project.zoom * 100);
+                // Zoom Slider Logic
+                const currentZoom = Math.round(App.State.zoom * 100);
                 html += `
                     <div class="control-group">
                         <div class="control-label"><span>Zoom Level</span> <span id="lbl-zoom">${currentZoom}%</span></div>
@@ -2150,18 +2134,6 @@ const App = {
             }
 
             content.innerHTML = html;
-            
-            // Listeners
-            if(tool === 'text') {
-                const update = () => {};
-                document.getElementById('opt-txt-content').addEventListener('input', e => App.State.toolSettings.text.content = e.target.value);
-                document.getElementById('opt-txt-font').addEventListener('change', e => App.State.toolSettings.text.fontFamily = e.target.value);
-                document.getElementById('opt-txt-size').addEventListener('input', e => { App.State.toolSettings.text.fontSize = parseInt(e.target.value); document.getElementById('lbl-txt-size').innerText = e.target.value + 'px'; });
-                document.getElementById('opt-txt-color').addEventListener('input', e => App.State.toolSettings.text.color = e.target.value);
-                document.getElementById('opt-txt-bold').onclick = function() { App.State.toolSettings.text.bold = !App.State.toolSettings.text.bold; this.classList.toggle('active'); };
-                document.getElementById('opt-txt-italic').onclick = function() { App.State.toolSettings.text.italic = !App.State.toolSettings.text.italic; this.classList.toggle('active'); };
-                document.getElementById('opt-txt-under').onclick = function() { App.State.toolSettings.text.underline = !App.State.toolSettings.text.underline; this.classList.toggle('active'); };
-            }
 
             const col = document.getElementById('opt-color');
             if(col) col.addEventListener('input', e => App.State.toolSettings.drawColor = e.target.value);
@@ -2171,42 +2143,40 @@ const App = {
             if(bsz) bsz.addEventListener('input', e => { App.State.toolSettings.brushSize = parseInt(e.target.value); document.getElementById('lbl-bsize').innerText = e.target.value + "px"; });
             const bhard = document.getElementById('opt-brush-hard');
             if(bhard) bhard.addEventListener('input', e => { App.State.toolSettings.brushHardness = parseInt(e.target.value); document.getElementById('lbl-bhard').innerText = e.target.value + "%"; });
-            const bopac = document.getElementById('opt-brush-opac');
+             const bopac = document.getElementById('opt-brush-opac');
             if(bopac) bopac.addEventListener('input', e => { App.State.toolSettings.brushOpacity = parseInt(e.target.value); document.getElementById('lbl-bopac').innerText = e.target.value + "%"; });
             const tol = document.getElementById('opt-tol');
-            if(tol) tol.addEventListener('input', e => { App.getActiveProject().selection.wandTolerance = parseInt(e.target.value); document.getElementById('lbl-tol').innerText = e.target.value; });
-            
+            if(tol) tol.addEventListener('input', e => { App.State.selection.wandTolerance = parseInt(e.target.value); document.getElementById('lbl-tol').innerText = e.target.value; });
+
+            // Zoom Slider Listener
             const zSlider = document.getElementById('opt-zoom');
             if(zSlider) {
                 zSlider.addEventListener('input', e => {
                     const val = parseInt(e.target.value);
                     document.getElementById('lbl-zoom').innerText = val + "%";
-                    App.getActiveProject().zoom = val / 100;
+                    App.State.zoom = val / 100;
                     App.UI.updateTransform();
                 });
             }
         },
 
         renderLayerList() {
-            const project = App.getActiveProject();
             const container = document.getElementById('layers-container');
             container.innerHTML = '';
-            if(!project) return;
-
-            project.layers.forEach(layer => {
+            App.State.layers.forEach(layer => {
                 const div = document.createElement('div');
-                div.className = `layer-item ${layer.id === project.activeLayerId ? 'active' : ''}`;
+                div.className = `layer-item ${layer.id === App.State.activeLayerId ? 'active' : ''}`;
                 div.onclick = () => App.Layers.setActive(layer.id);
-                
+
                 const thumb = document.createElement('canvas');
                 thumb.className = 'layer-thumb'; thumb.width = 30; thumb.height = 30;
                 const tCtx = thumb.getContext('2d');
                 tCtx.drawImage(layer.canvas, 0, 0, 30, 30);
-                
+
                 const info = document.createElement('div');
                 info.className = 'layer-info';
                 info.innerHTML = `<div class="layer-name">${layer.name}</div>`;
-                
+
                 const ops = document.createElement('div');
                 ops.className = 'layer-ops';
                 ops.innerHTML = `<i class="layer-btn ph-fill ${layer.visible ? 'ph-eye' : 'ph-eye-slash'}" onclick="App.Layers.toggleVisibility('${layer.id}', event)"></i>`;
@@ -2218,31 +2188,28 @@ const App = {
 
         applyCustomRotation() {
             const val = parseFloat(document.getElementById('custom-rot-val').value);
-            if(!isNaN(val) && val !== 0) this.transformLayer('rotate', val);
-        },
-        applyCustomRotationFromModal() {
-            const val = parseFloat(document.getElementById('custom-rot-val-modal').value);
-            if(!isNaN(val) && val !== 0) this.transformLayer('rotate', val);
+            if(!isNaN(val) && val !== 0) {
+                this.transformLayer('rotate', val);
+            }
             this.closeModal('rotate-modal');
         },
 
         transformLayer(type, val) {
             const layer = App.Layers.getActive();
-            const project = App.getActiveProject();
             if(!layer) return;
-            
+
             const applyTransform = (cvs) => {
                 const tempCvs = document.createElement('canvas');
-                tempCvs.width = project.width; tempCvs.height = project.height;
+                tempCvs.width = App.State.width; tempCvs.height = App.State.height;
                 const ctx = tempCvs.getContext('2d');
-                
+
                 if(type === 'rotate') {
                     const rad = val * Math.PI / 180;
-                    ctx.translate(project.width/2, project.height/2);
+                    ctx.translate(App.State.width/2, App.State.height/2);
                     ctx.rotate(rad);
-                    ctx.drawImage(cvs, -project.width/2, -project.height/2);
+                    ctx.drawImage(cvs, -App.State.width/2, -App.State.height/2);
                 } else if (type === 'flip') {
-                    ctx.translate(val==='h'?project.width:0, val==='v'?project.height:0);
+                    ctx.translate(val==='h'?App.State.width:0, val==='v'?App.State.height:0);
                     ctx.scale(val==='h'?-1:1, val==='v'?-1:1);
                     ctx.drawImage(cvs, 0, 0);
                 }
@@ -2251,62 +2218,59 @@ const App = {
 
             layer.canvas = applyTransform(layer.canvas);
             layer.originalCanvas = applyTransform(layer.originalCanvas);
-            
+
             App.Render.update();
             App.UI.renderLayerList();
             App.History.push();
         },
-        
+
         startCrop() {
-            const project = App.getActiveProject();
-            if(!project) return;
             const cvs = document.getElementById('main-canvas');
             const img = document.getElementById('cropper-img');
-            img.src = cvs.toDataURL(); 
+            img.src = cvs.toDataURL();
             img.style.display = 'block';
             cvs.style.display = 'none';
-            project.cropper = new Cropper(img, { viewMode: 1, background: false, autoCropArea: 0.8 });
+            App.State.cropper = new Cropper(img, { viewMode: 1, background: false, autoCropArea: 0.8 });
         },
 
         applyCrop() {
-            const project = App.getActiveProject();
-            if(project && project.cropper) {
-                const data = project.cropper.getData();
-                project.width = Math.round(data.width);
-                project.height = Math.round(data.height);
-                
-                project.layers.forEach(layer => {
+            if(App.State.cropper) {
+                const data = App.State.cropper.getData();
+                App.State.width = Math.round(data.width);
+                App.State.height = Math.round(data.height);
+
+                App.State.layers.forEach(layer => {
                     const t1 = document.createElement('canvas'); t1.width = data.width; t1.height = data.height;
                     t1.getContext('2d').drawImage(layer.canvas, -data.x, -data.y);
                     layer.canvas = t1;
-                    
+
                     const t2 = document.createElement('canvas'); t2.width = data.width; t2.height = data.height;
                     t2.getContext('2d').drawImage(layer.originalCanvas, -data.x, -data.y);
                     layer.originalCanvas = t2;
                 });
-                
+
                 const main = document.getElementById('main-canvas'); main.width = data.width; main.height = data.height;
                 const ov = document.getElementById('overlay-canvas'); ov.width = data.width; ov.height = data.height;
-
+                document.getElementById('resize-w').value = data.width;
+                document.getElementById('resize-h').value = data.height;
                 this.selectTool('move');
                 App.Render.update();
                 App.UI.renderLayerList();
                 App.History.push();
             }
         },
-        
+
         applyResize() {
-            const project = App.getActiveProject();
             const w = parseInt(document.getElementById('resize-w').value);
             const h = parseInt(document.getElementById('resize-h').value);
-            if(!w || !h || !project) return;
-            project.width = w; project.height = h;
-            
-            project.layers.forEach(layer => {
+            if(!w || !h) return;
+            App.State.width = w; App.State.height = h;
+
+            App.State.layers.forEach(layer => {
                 const t1 = document.createElement('canvas'); t1.width = w; t1.height = h;
                 t1.getContext('2d').drawImage(layer.canvas, 0, 0, w, h);
                 layer.canvas = t1;
-                
+
                 const t2 = document.createElement('canvas'); t2.width = w; t2.height = h;
                 t2.getContext('2d').drawImage(layer.originalCanvas, 0, 0, w, h);
                 layer.originalCanvas = t2;
@@ -2314,68 +2278,58 @@ const App = {
 
             const main = document.getElementById('main-canvas'); main.width = w; main.height = h;
             const ov = document.getElementById('overlay-canvas'); ov.width = w; ov.height = h;
-            
+
             this.closeModal('resize-modal');
             App.Render.update();
             App.History.push();
         },
 
-        applyResizeLayer() {
-            const w = parseInt(document.getElementById('resize-layer-w').value);
-            const h = parseInt(document.getElementById('resize-layer-h').value);
-            if(w && h) {
-                App.Layers.resizeActive(w, h);
-            }
-            this.closeModal('resize-layer-modal');
-        },
-
         updateTransform() {
-            const project = App.getActiveProject();
-            if(!project) return;
             const el = document.getElementById('canvas-wrapper');
-            el.style.transform = `translate(${project.pan.x}px, ${project.pan.y}px) scale(${project.zoom})`;
+            el.style.transform = `translate(${App.State.pan.x}px, ${App.State.pan.y}px) scale(${App.State.zoom})`;
         },
 
         updateFilename(name) { document.getElementById('filename-display').innerText = name; },
         setBusy(busy) { document.getElementById('global-loader').style.display = busy ? 'inline-block' : 'none'; },
+
+        toggleHistoryBtns() {
+            // Removed history buttons
+        }
     },
 
     // --- HISTORY ---
     History: {
         push() {
-            const project = App.getActiveProject();
-            if(!project) return;
-
-            const stateSnapshot = project.layers.map(l => ({
+            const stateSnapshot = App.State.layers.map(l => ({
                 ...l,
                 dataURL: l.canvas.toDataURL(),
                 originalDataURL: l.originalCanvas.toDataURL(),
                 filters: {...l.filters}
             }));
-            
-            const historyState = {
+
+            const globalState = {
                 layers: stateSnapshot,
-                width: project.width,
-                height: project.height,
-                activeLayerId: project.activeLayerId
+                width: App.State.width,
+                height: App.State.height,
+                activeLayerId: App.State.activeLayerId
             };
 
-            if(project.history.length > 10) project.history.shift();
-            project.history = project.history.slice(0, project.historyIndex + 1);
-            project.history.push(historyState);
-            project.historyIndex = project.history.length - 1;
+            if(App.State.history.length > 10) App.State.history.shift();
+            App.State.history = App.State.history.slice(0, App.State.historyIndex + 1);
+            App.State.history.push(globalState);
+            App.State.historyIndex = App.State.history.length - 1;
+            // Removed toggleHistoryBtns call
         },
-        
+
         restore(state) {
-            const project = App.getActiveProject();
-            project.width = state.width;
-            project.height = state.height;
-            project.activeLayerId = state.activeLayerId;
-            
+            App.State.width = state.width;
+            App.State.height = state.height;
+            App.State.activeLayerId = state.activeLayerId;
+
             const main = document.getElementById('main-canvas'); main.width = state.width; main.height = state.height;
             const ov = document.getElementById('overlay-canvas'); ov.width = state.width; ov.height = state.height;
-            
-            project.layers = [];
+
+            App.State.layers = [];
             let loaded = 0;
             if(state.layers.length === 0) { App.Render.update(); return; }
 
@@ -2384,27 +2338,27 @@ const App = {
                 img.onload = () => {
                     const cvs = document.createElement('canvas'); cvs.width = state.width; cvs.height = state.height;
                     cvs.getContext('2d').drawImage(img, 0, 0);
-                    
+
                     const origImg = new Image();
                     origImg.onload = () => {
                         const oCvs = document.createElement('canvas'); oCvs.width = state.width; oCvs.height = state.height;
                         oCvs.getContext('2d').drawImage(origImg, 0, 0);
 
-                        project.layers.push({
+                        App.State.layers.push({
                             id: l.id, name: l.name, canvas: cvs, originalCanvas: oCvs,
                             visible: l.visible, opacity: l.opacity, blendMode: l.blendMode,
                             filters: l.filters, x: l.x, y: l.y
                         });
-                        
+
                         loaded++;
                         if(loaded === state.layers.length) {
-                            project.layers.sort((a,b) => {
+                            App.State.layers.sort((a,b) => {
                                 const idxA = state.layers.findIndex(sl => sl.id === a.id);
                                 const idxB = state.layers.findIndex(sl => sl.id === b.id);
                                 return idxA - idxB;
                             });
                             App.Render.update();
-                            App.Layers.setActive(state.activeLayerId);
+                            App.Layers.setActive(state.activeLayerId); // Will sync controls
                         }
                     };
                     origImg.src = l.originalDataURL;
@@ -2414,17 +2368,15 @@ const App = {
         },
 
         undo() {
-            const project = App.getActiveProject();
-            if(project && project.historyIndex > 0) {
-                project.historyIndex--;
-                this.restore(project.history[project.historyIndex]);
+            if(App.State.historyIndex > 0) {
+                App.State.historyIndex--;
+                this.restore(App.State.history[App.State.historyIndex]);
             }
         },
         redo() {
-            const project = App.getActiveProject();
-            if(project && project.historyIndex < project.history.length - 1) {
-                project.historyIndex++;
-                this.restore(project.history[project.historyIndex]);
+            if(App.State.historyIndex < App.State.history.length - 1) {
+                App.State.historyIndex++;
+                this.restore(App.State.history[App.State.historyIndex]);
             }
         }
     }
