@@ -1382,8 +1382,8 @@ const App = {
                         document.getElementById('canvas-area').style.cursor = 'grabbing';
                     }
                 }
-                if(e.ctrlKey && e.key === 'c') this.copySelection();
-                if(e.ctrlKey && e.key === 'v') this.pasteSelection();
+                if((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) this.copySelection();
+                if((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) this.pasteSelection();
             });
             window.addEventListener('keyup', e => {
                 if(e.code === 'Space') {
@@ -1828,6 +1828,80 @@ const App = {
                 temp.getContext('2d').drawImage(layer.canvas, 0, 0, layer.canvas.width, layer.canvas.height, 0, 0, layer.width, layer.height);
                 App.State.clipboard = temp;
             }
+        },
+
+        pasteSelection() {
+            if(!App.State.clipboard) return;
+            App.Layers.addLayer(App.State.clipboard, "Pasted Layer");
+        },
+
+        paintClone(destPos) {
+            const layer = App.Layers.getActive();
+            if(!layer || !App.State.cloneOffset) return;
+            const project = App.getActiveProject();
+            const sourceLayer = project.layers.find(l => l.id === App.State.cloneLayerId);
+            if(!sourceLayer) return;
+
+            const ctx = layer.canvas.getContext('2d');
+            const oCtx = layer.originalCanvas.getContext('2d');
+            const settings = App.State.toolSettings;
+            const size = settings.brushSize;
+            const rad = size / 2;
+
+            // Calculate source position in global space
+            // destPos passed here is local to layer (scaled).
+            // We need to un-local it to get global?
+            // Wait, in handleMove:
+            // if (tool === 'clone') this.paintClone(localPos);
+            // So destPos is local to DEST layer.
+
+            // But cloneOffset = pos (Global) - cloneSource (Global).
+            // So we need Global Dest to get Global Source.
+            // Global Dest = (destPos * layer.width / layer.canvas.width) + layer.x ??
+
+            // This is getting complicated with scaling.
+            // Let's simplify: Clone source is captured globally.
+            // But painting is done locally on the layer canvas.
+
+            // If we assume layers are 1:1 for now or close enough.
+            // Or better: Re-calculate global dest from local destPos.
+            const destGlobalX = (destPos.x / layer.canvas.width) * layer.width + layer.x;
+            const destGlobalY = (destPos.y / layer.canvas.height) * layer.height + layer.y;
+
+            const srcGlobalX = destGlobalX - App.State.cloneOffset.x;
+            const srcGlobalY = destGlobalY - App.State.cloneOffset.y;
+
+            // Map Global Source to Source Layer Local
+            const srcLocalX = (srcGlobalX - sourceLayer.x) * (sourceLayer.canvas.width / sourceLayer.width);
+            const srcLocalY = (srcGlobalY - sourceLayer.y) * (sourceLayer.canvas.height / sourceLayer.height);
+
+            const brushCvs = document.createElement('canvas');
+            brushCvs.width = size; brushCvs.height = size;
+            const bCtx = brushCvs.getContext('2d');
+
+            // Draw from source layer
+            bCtx.drawImage(sourceLayer.canvas, srcLocalX - rad, srcLocalY - rad, size, size, 0, 0, size, size);
+
+            // Apply hardness (gradient mask)
+            bCtx.globalCompositeOperation = 'destination-in';
+            const gradient = bCtx.createRadialGradient(rad, rad, rad * (settings.brushHardness/100), rad, rad, rad);
+            gradient.addColorStop(0, 'rgba(0,0,0,1)');
+            gradient.addColorStop(1, 'rgba(0,0,0,0)');
+            bCtx.fillStyle = gradient;
+            bCtx.fillRect(0, 0, size, size);
+
+            // Draw to dest
+            const drawTo = (targetCtx) => {
+                targetCtx.save();
+                targetCtx.globalAlpha = settings.brushOpacity / 100;
+                targetCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
+                targetCtx.restore();
+            };
+
+            drawTo(ctx);
+            drawTo(oCtx);
+
+            App.Render.update();
         },
 
         // Re-implement others if needed...
