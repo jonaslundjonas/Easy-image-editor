@@ -11,6 +11,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/magic-wand-js@1.0.0/dist/magic-wand.min.js"></script>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css">
 
@@ -426,6 +427,13 @@
                     <h3>Selection</h3>
                     <div class="btn-group">
                         <button data-action="start-selection" class="btn btn-secondary">Select Area</button>
+                        <button data-action="start-magic-wand" class="btn btn-secondary">Magic Wand</button>
+                    </div>
+                    <div id="magic-wand-options" style="display: none; margin-top: 10px;">
+                        <div class="control-item">
+                            <div class="label-container"><label for="magic-wand-tolerance-slider">Tolerance</label><span class="slider-value">25</span></div>
+                            <input type="range" id="magic-wand-tolerance-slider" min="0" max="255" value="25" data-unit="">
+                        </div>
                     </div>
                     <p class="selection-hint">Hold Shift to select multiple areas.</p>
                     <div id="selection-actions" style="margin-top: 10px; display: none;">
@@ -613,7 +621,8 @@
                     whitePoint: document.getElementById('white-point-slider'),
                     lineThickness: document.getElementById('line-thickness-slider'),
                     brushSize: document.getElementById('brush-size-slider'),
-                    brushSmoothness: document.getElementById('brush-smoothness-slider')
+                    brushSmoothness: document.getElementById('brush-smoothness-slider'),
+                    magicWandTolerance: document.getElementById('magic-wand-tolerance-slider')
                 },
                 resizeW: document.getElementById('resize-w'),
                 resizeH: document.getElementById('resize-h'),
@@ -623,6 +632,7 @@
                     cancel: document.querySelector('[data-action="cancel-crop"]')
                 },
                 selectionActions: document.getElementById('selection-actions'),
+                magicWandOptions: document.getElementById('magic-wand-options'),
                 cloneToolOptions: document.getElementById('clone-tool-options'),
                 historyActions: {
                     undo: document.getElementById('undo-btn'),
@@ -656,11 +666,13 @@
                 isSelecting: false,
                 isDrawing: false,
                 isCloning: false,
+                isMagicWanding: false,
                 canvasIsDirty: false,
                 drawingTool: null,
                 undoStack: [],
                 redoStack: [],
                 selectionRects: [],
+                selectionMask: null,
                 currentSelectionRect: null,
                 selectionStartPoint: null,
                 selectionInverted: false,
@@ -901,26 +913,66 @@
                 const mainCtx = dom.canvas.getContext('2d');
                 mainCtx.clearRect(0, 0, dom.canvas.width, dom.canvas.height);
 
-                if (state.selectionRects.length === 0) {
+                if (state.selectionRects.length === 0 && !state.selectionMask) {
                     mainCtx.drawImage(filterCacheCanvas, 0, 0);
                 } else {
                     mainCtx.drawImage(state.baseImage, 0, 0);
-                    mainCtx.save();
-                    mainCtx.beginPath();
-                    if (state.selectionInverted) {
-                        mainCtx.rect(0, 0, dom.canvas.width, dom.canvas.height);
-                        state.selectionRects.forEach(rect => {
-                            mainCtx.rect(rect.x, rect.y, rect.w, rect.h);
-                        });
-                        mainCtx.clip("evenodd");
-                    } else {
-                        state.selectionRects.forEach(rect => {
-                            mainCtx.rect(rect.x, rect.y, rect.w, rect.h);
-                        });
-                        mainCtx.clip();
+
+                    if (state.selectionMask) {
+                        const tempMaskCanvas = document.createElement('canvas');
+                        tempMaskCanvas.width = dom.canvas.width;
+                        tempMaskCanvas.height = dom.canvas.height;
+                        const tempMaskCtx = tempMaskCanvas.getContext('2d');
+                        const maskImageData = tempMaskCtx.createImageData(dom.canvas.width, dom.canvas.height);
+
+                        for (let i = 0; i < state.selectionMask.data.length; i++) {
+                            const maskValue = state.selectionInverted ? 1 - state.selectionMask.data[i] : state.selectionMask.data[i];
+                            if (maskValue) {
+                                maskImageData.data[i * 4 + 3] = 255;
+                            }
+                        }
+                        tempMaskCtx.putImageData(maskImageData, 0, 0);
+
+                        mainCtx.save();
+                        mainCtx.globalCompositeOperation = 'destination-in';
+                        mainCtx.drawImage(tempMaskCanvas, 0, 0);
+                        mainCtx.globalCompositeOperation = 'source-over'; // Reset
+                        mainCtx.drawImage(filterCacheCanvas, 0, 0);
+                        mainCtx.restore();
+
+                    } else { // Fallback to rectangle selection
+                        mainCtx.save();
+                        mainCtx.beginPath();
+                        if (state.selectionInverted) {
+                            mainCtx.rect(0, 0, dom.canvas.width, dom.canvas.height);
+                            state.selectionRects.forEach(rect => {
+                                mainCtx.rect(rect.x, rect.y, rect.w, rect.h);
+                            });
+                            mainCtx.clip("evenodd");
+                        } else {
+                            state.selectionRects.forEach(rect => {
+                                mainCtx.rect(rect.x, rect.y, rect.w, rect.h);
+                            });
+                            mainCtx.clip();
+                        }
+                        mainCtx.drawImage(filterCacheCanvas, 0, 0);
+                        mainCtx.restore();
                     }
-                    mainCtx.drawImage(filterCacheCanvas, 0, 0);
-                    mainCtx.restore();
+                }
+                 // Also, draw the visual selection outline
+                selectionCtx.clearRect(0, 0, dom.selectionCanvas.width, dom.selectionCanvas.height);
+                if (state.selectionMask) {
+                     const outlineImageData = selectionCtx.createImageData(dom.selectionCanvas.width, dom.selectionCanvas.height);
+                     const maskData = state.selectionMask.data;
+                     for (let i = 0; i < maskData.length; i++) {
+                         if (maskData[i]) {
+                             outlineImageData.data[i * 4] = 242;
+                             outlineImageData.data[i * 4 + 1] = 184;
+                             outlineImageData.data[i * 4 + 2] = 181;
+                             outlineImageData.data[i * 4 + 3] = 150;
+                         }
+                     }
+                     selectionCtx.putImageData(outlineImageData, 0, 0);
                 }
             };
 
@@ -1124,8 +1176,10 @@
                 state.isSelecting = false;
                 state.isDrawing = false;
                 state.isCloning = false;
+                state.isMagicWanding = false;
                 dom.imageContainer.classList.remove('is-selecting', 'is-cloning', 'source-set');
                 dom.cloneToolOptions.style.display = 'none';
+                dom.magicWandOptions.style.display = 'none';
                 if (state.isCropping) endCrop(false);
             };
 
@@ -1316,6 +1370,11 @@
                             state.isSelecting = true;
                             dom.imageContainer.classList.add('is-selecting');
                             break;
+                        case 'start-magic-wand':
+                            state.isMagicWanding = true;
+                            dom.imageContainer.classList.add('is-selecting');
+                            dom.magicWandOptions.style.display = 'block';
+                            break;
                         case 'deselect':
                             deselectArea();
                             break;
@@ -1373,6 +1432,7 @@
             const deselectArea = () => {
                 state.isSelecting = false;
                 state.selectionRects = [];
+                state.selectionMask = null;
                 state.currentSelectionRect = null;
                 dom.imageContainer.classList.remove('is-selecting');
                 selectionCtx.clearRect(0, 0, dom.selectionCanvas.width, dom.selectionCanvas.height);
@@ -1383,9 +1443,9 @@
             };
 
             const applySelection = async () => {
-                if (state.selectionRects.length === 0) return;
+                if (state.selectionRects.length === 0 && !state.selectionMask) return;
                 
-                pushStateToHistory(); // ✨ FIX: Save state before applying selection
+                pushStateToHistory();
                 const newBaseImage = new Image();
                 newBaseImage.onload = () => {
                     state.baseImage = newBaseImage;
@@ -1434,6 +1494,7 @@
 
             dom.invertMaskToggle.addEventListener('change', () => {
                 state.selectionInverted = dom.invertMaskToggle.checked;
+                // The redrawFromCache function now handles both mask and rect inversion
                 redrawFromCache();
             });
 
@@ -1443,10 +1504,31 @@
             });
 
             dom.selectionCanvas.addEventListener('mousedown', async (e) => {
-                if (!state.isSelecting && !state.isDrawing && !state.isCloning) return;
+                if (!state.isSelecting && !state.isDrawing && !state.isCloning && !state.isMagicWanding) return;
                 e.preventDefault();
                 
-                if (state.isCloning) {
+                if (state.isMagicWanding) {
+                    await commitCanvasToBaseImage();
+                    pushStateToHistory();
+
+                    const mainCtx = dom.canvas.getContext('2d', { willReadFrequently: true });
+                    const imageData = mainCtx.getImageData(0, 0, dom.canvas.width, dom.canvas.height);
+                    const mousePos = getMousePos(e);
+                    const tolerance = parseInt(dom.sliders.magicWandTolerance.value, 10);
+
+                    const mask = MagicWand.select(imageData, {
+                        x: Math.round(mousePos.x),
+                        y: Math.round(mousePos.y),
+                        tolerance: tolerance
+                    });
+
+                    if (mask) {
+                        state.selectionMask = mask;
+                        dom.selectionActions.style.display = 'block';
+                        redrawFromCache();
+                    }
+
+                } else if (state.isCloning) {
                     if (e.altKey) {
                         await commitCanvasToBaseImage();
                         state.cloneSource = getMousePos(e);
