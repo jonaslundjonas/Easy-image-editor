@@ -605,7 +605,13 @@
                     <button class="btn" data-cmd="flip-h" title="Flip H"><i class="ph ph-arrows-left-right"></i> Flip H</button>
                     <button class="btn" data-cmd="flip-v" title="Flip V"><i class="ph ph-arrows-down-up"></i> Flip V</button>
                 </div>
-                <!-- Removed explicit Resize Layer button as it's now interactive -->
+
+                <button id="btn-transform-start" class="btn" style="width:100%; margin-top:5px;" onclick="App.UI.startTransform()">Free Transform</button>
+
+                <div id="transform-actions" class="btn-grid hidden" style="margin-top:5px;">
+                    <button class="btn btn-primary" onclick="App.UI.applyTransform()"><i class="ph ph-check"></i> Apply</button>
+                    <button class="btn btn-danger" onclick="App.UI.cancelTransform()"><i class="ph ph-x"></i> Cancel</button>
+                </div>
 
                 <div class="control-group" style="margin-top:5px;">
                     <div class="control-label"><span>Custom Rotation</span></div>
@@ -741,6 +747,8 @@ const App = {
         activeTool: 'move',
         isDragging: false,
         isDrawing: false,
+        isTransforming: false, // New state
+        transformBackup: null, // Backup for cancel
         lastMouse: { x: 0, y: 0 },
         drawStart: { x: 0, y: 0 },
         isSpacePressed: false,
@@ -959,9 +967,6 @@ const App = {
             // Populate UI if Text layer
             const layer = this.getActive();
             if(layer && layer.type === 'text') {
-                App.State.activeTool = 'text'; // Auto switch to text tool? Maybe not, but populate text options
-                // We'll update the text tool options sidebar if it is active, or we switch to it.
-                // Better: Just update the tool settings state so when tool is clicked it's correct.
                 App.State.toolSettings.text = { ...layer.textProps };
                 // If text tool is currently active, re-render options
                 if(App.State.activeTool === 'text') App.UI.renderToolOptions('text');
@@ -1095,8 +1100,8 @@ const App = {
                 ovCtx.canvas.classList.remove('ants');
             }
 
-            // Render Transform Handles if Move tool and active layer
-            if (App.State.activeTool === 'move') {
+            // Render Transform Handles if isTransforming
+            if (App.State.isTransforming) {
                 const layer = App.Layers.getActive();
                 if (layer && layer.visible) {
                     this.drawHandles(ovCtx, layer);
@@ -1367,6 +1372,9 @@ const App = {
             window.addEventListener('mousemove', e => this.handleMove(e));
             window.addEventListener('mouseup', e => this.handleUp(e));
             
+            // Double Click for Text Edit
+            area.addEventListener('dblclick', e => this.handleDoubleClick(e));
+
             window.addEventListener('keydown', e => {
                 if(e.code === 'Space') {
                     App.State.isSpacePressed = true;
@@ -1404,6 +1412,34 @@ const App = {
             return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY, rawX: e.clientX, rawY: e.clientY };
         },
 
+        handleDoubleClick(e) {
+            const project = App.getActiveProject();
+            if(!project) return;
+            const pos = this.getImgPos(e);
+
+            // Hit test for layers (reverse order: top to bottom)
+            const layers = [...project.layers];
+            for (let i = 0; i < layers.length; i++) {
+                const layer = layers[i];
+                if (!layer.visible) continue;
+                if (pos.x >= layer.x && pos.x <= layer.x + layer.width &&
+                    pos.y >= layer.y && pos.y <= layer.y + layer.height) {
+
+                    App.Layers.setActive(layer.id);
+
+                    if (layer.type === 'text') {
+                        App.UI.selectTool('text');
+                        // Focus the content area
+                        setTimeout(() => {
+                            const input = document.getElementById('opt-txt-content');
+                            if(input) { input.focus(); input.select(); }
+                        }, 100);
+                    }
+                    return;
+                }
+            }
+        },
+
         getHandleUnderMouse(pos, layer) {
             const size = 12; // Hit area
             const handles = [
@@ -1426,7 +1462,7 @@ const App = {
 
             if(tool === 'move') {
                 const layer = App.Layers.getActive();
-                if(layer && layer.visible) {
+                if(App.State.isTransforming && layer && layer.visible) {
                     const handle = this.getHandleUnderMouse(pos, layer);
                     if(handle) {
                         App.State.isDragging = true;
@@ -1504,7 +1540,7 @@ const App = {
             const pos = this.getImgPos(e);
 
             // Cursor updates for handles
-            if (tool === 'move' && !App.State.isDragging) {
+            if (tool === 'move' && App.State.isTransforming && !App.State.isDragging) {
                 const layer = App.Layers.getActive();
                 if(layer && layer.visible) {
                     const handle = this.getHandleUnderMouse(pos, layer);
@@ -1628,7 +1664,21 @@ const App = {
             document.getElementById('canvas-area').style.cursor = '';
             
             if(App.State.activeTool === 'move' && (App.State.dragMode === 'layer' || App.State.dragMode === 'resize')) {
-                App.History.push();
+                // If resize, we don't push history yet? User wants explicit apply?
+                // Actually the user wants "Apply" to finalize.
+                // But my current logic updates live.
+                // We should store a temporary state and only commit on Apply?
+                // The prompt says "initiation button to not have it active all the time".
+                // It doesn't strictly say "no live preview".
+                // But generally "Apply" means "Commit".
+                // However, I'm updating the actual layer object properties `width`/`height` live.
+                // If I hit cancel, I need to revert.
+                // So History push should happen on Apply, not on Up?
+                // Or rather, the "Transform" operation is one atomic history event.
+                // So dragging shouldn't push history.
+                if (App.State.dragMode === 'layer') {
+                    App.History.push();
+                }
             }
 
             if(App.State.isDrawing) {
@@ -1671,11 +1721,39 @@ const App = {
         // Painting selection is global.
         paintSelectionBrush(pos) {
             const project = App.getActiveProject();
-            // ... (keep logic global for selection)
-            // Implementation omitted for brevity, use same as before but ensure `pos` is global
-            // Wait, I mapped pos to local in handleMove.
-            // Selection tools should stay Global.
-            // Fix handleMove to branch logic.
+            if (!project.selection.active || !project.selection.mask) {
+                const mask = document.createElement('canvas');
+                mask.width = project.width; mask.height = project.height;
+                project.selection = { active: true, mask: mask, type: 'brush' };
+            }
+
+            const ctx = project.selection.mask.getContext('2d');
+            const settings = App.State.toolSettings;
+            const size = settings.brushSize;
+            const rad = size / 2;
+
+            const brush = document.createElement('canvas');
+            brush.width = size; brush.height = size;
+            const bCtx = brush.getContext('2d');
+
+            const gradient = bCtx.createRadialGradient(rad, rad, rad * (settings.brushHardness / 100), rad, rad, rad);
+            const alpha = settings.brushOpacity / 100;
+            gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+            bCtx.fillStyle = gradient;
+            bCtx.fillRect(0, 0, size, size);
+
+            ctx.save();
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.drawImage(brush, pos.x - rad, pos.y - rad);
+            ctx.restore();
+
+            App.Render.update();
+        },
+
+        paintSmudge(fromPos, toPos) {
+            // ... (keeping implementation)
         },
 
         paintBrush(destPos) {
@@ -1879,6 +1957,48 @@ const App = {
 
             // Initial Project
             App.IO.createNewProject();
+        },
+
+        startTransform() {
+            const layer = App.Layers.getActive();
+            if(!layer) return;
+            App.State.isTransforming = true;
+            // Backup
+            App.State.transformBackup = {
+                x: layer.x, y: layer.y, width: layer.width, height: layer.height
+            };
+
+            // Show handles
+            App.Render.update();
+
+            // Update UI
+            document.getElementById('btn-transform-start').classList.add('hidden');
+            document.getElementById('transform-actions').classList.remove('hidden');
+
+            // Switch to move tool if not active
+            this.selectTool('move');
+        },
+
+        applyTransform() {
+            App.State.isTransforming = false;
+            App.State.transformBackup = null;
+            document.getElementById('btn-transform-start').classList.remove('hidden');
+            document.getElementById('transform-actions').classList.add('hidden');
+            App.Render.update();
+            App.History.push();
+        },
+
+        cancelTransform() {
+            if(App.State.transformBackup) {
+                const layer = App.Layers.getActive();
+                const b = App.State.transformBackup;
+                layer.x = b.x; layer.y = b.y; layer.width = b.width; layer.height = b.height;
+            }
+            App.State.isTransforming = false;
+            App.State.transformBackup = null;
+            document.getElementById('btn-transform-start').classList.remove('hidden');
+            document.getElementById('transform-actions').classList.add('hidden');
+            App.Render.update();
         },
 
         setupMenus() {
