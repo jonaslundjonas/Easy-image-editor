@@ -2634,6 +2634,17 @@ const App = {
             const maskCvs = this.computeColorMask(layer, lx, ly, tolerance, contiguous);
             if(!maskCvs) return;
 
+            // Dilate mask to cover anti-aliased edges
+            const mCtx = maskCvs.getContext('2d');
+            const tempMask = document.createElement('canvas');
+            tempMask.width = maskCvs.width; tempMask.height = maskCvs.height;
+            tempMask.getContext('2d').drawImage(maskCvs, 0, 0);
+
+            mCtx.drawImage(tempMask, 1, 0);
+            mCtx.drawImage(tempMask, -1, 0);
+            mCtx.drawImage(tempMask, 0, 1);
+            mCtx.drawImage(tempMask, 0, -1);
+
             // 2. Prepare Fill Pattern/Color
             const settings = App.State.toolSettings;
             const color = settings.drawColor;
