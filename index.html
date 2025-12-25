@@ -1670,6 +1670,13 @@ const App = {
                 this.performMagicWandWithOpts(pos, e.shiftKey, e.altKey);
             }
 
+            if(tool === 'bucket') {
+                this.fillBucket(pos);
+                App.UI.renderLayerList();
+                App.History.push();
+                return;
+            }
+
             if(tool === 'paint' || tool === 'eraser' || tool === 'sel-brush' || tool === 'smudge') {
                 App.State.isDrawing = true;
                 App.State.lastMouse = pos;
