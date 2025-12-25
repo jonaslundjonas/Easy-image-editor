@@ -1891,15 +1891,16 @@ const App = {
                             const x = localLast.x + (localPos.x - localLast.x) * t;
                             const y = localLast.y + (localPos.y - localLast.y) * t;
                             if(tool === 'smudge') {
-                                // Smudge needs careful logic
+                                this.paintSmudge({x: localLast.x + (localPos.x - localLast.x) * (t-1/steps), y: localLast.y + (localPos.y - localLast.y) * (t-1/steps)}, {x, y});
                             }
                             else if (tool === 'clone') this.paintClone({x, y});
                             else if (tool === 'sel-brush') this.paintSelectionBrush({x, y}, e.altKey);
                             else this.paintBrush({x, y});
                         }
                     }
-                    // if(tool === 'smudge') this.paintSmudge(last, pos);
-                    if (tool === 'clone') this.paintClone(localPos);
+
+                    if(tool === 'smudge') this.paintSmudge(localLast, localPos);
+                    else if (tool === 'clone') this.paintClone(localPos);
                     else if (tool === 'sel-brush') this.paintSelectionBrush(localPos, e.altKey);
                     else this.paintBrush(localPos);
 
@@ -2255,6 +2256,62 @@ const App = {
 
         // Helper: Convert global mask coords to selection? No, selection is global.
         // Painting selection is global.
+        paintSmudge(fromPos, toPos) {
+            const layer = App.Layers.getActive();
+            if(!layer) return;
+            const ctx = layer.canvas.getContext('2d');
+            const oCtx = layer.originalCanvas.getContext('2d');
+            const settings = App.State.toolSettings;
+            const size = settings.brushSize;
+            const rad = size / 2;
+
+            const brush = document.createElement('canvas');
+            brush.width = size; brush.height = size;
+            const bCtx = brush.getContext('2d');
+
+            const r0 = Math.min(rad * (settings.brushHardness/100), rad - 0.1);
+            const gradient = bCtx.createRadialGradient(rad, rad, r0, rad, rad, rad);
+            gradient.addColorStop(0, 'rgba(255,255,255,1)');
+            gradient.addColorStop(1, 'rgba(255,255,255,0)');
+            bCtx.fillStyle = gradient;
+            bCtx.fillRect(0, 0, size, size);
+
+            const srcCvs = document.createElement('canvas');
+            srcCvs.width = size; srcCvs.height = size;
+            const sCtx = srcCvs.getContext('2d');
+            sCtx.drawImage(layer.canvas, fromPos.x - rad, fromPos.y - rad, size, size, 0, 0, size, size);
+
+            sCtx.globalCompositeOperation = 'destination-in';
+            sCtx.drawImage(brush, 0, 0);
+
+            const opacity = settings.brushOpacity / 100;
+            const selMask = this.getSelectionMaskForLayer(layer);
+
+            const drawTo = (targetCtx) => {
+                targetCtx.save();
+                targetCtx.globalAlpha = opacity;
+                if (selMask) {
+                     const maskedSmudge = document.createElement('canvas');
+                     maskedSmudge.width = layer.canvas.width; maskedSmudge.height = layer.canvas.height;
+                     const mCtx = maskedSmudge.getContext('2d');
+
+                     mCtx.drawImage(srcCvs, toPos.x - rad, toPos.y - rad);
+                     mCtx.globalCompositeOperation = 'destination-in';
+                     mCtx.drawImage(selMask, 0, 0);
+
+                     targetCtx.drawImage(maskedSmudge, 0, 0);
+                } else {
+                    targetCtx.drawImage(srcCvs, toPos.x - rad, toPos.y - rad);
+                }
+                targetCtx.restore();
+            };
+
+            drawTo(ctx);
+            drawTo(oCtx);
+
+            App.Render.update();
+        },
+
         paintSelectionBrush(pos, isSubtract) {
             const project = App.getActiveProject();
             if (!project.selection.active || !project.selection.mask) {
@@ -2313,7 +2370,9 @@ const App = {
             const g = parseInt(color.slice(3, 5), 16);
             const b = parseInt(color.slice(5, 7), 16);
             
-            const gradient = bCtx.createRadialGradient(rad, rad, rad * (settings.brushHardness/100), rad, rad, rad);
+            // Ensure inner radius < outer radius to avoid invisible gradient at 100% hardness
+            const r0 = Math.min(rad * (settings.brushHardness/100), rad - 0.1);
+            const gradient = bCtx.createRadialGradient(rad, rad, r0, rad, rad, rad);
             gradient.addColorStop(0, `rgba(${r},${g},${b},1)`);
             gradient.addColorStop(1, `rgba(${r},${g},${b},0)`);
             
@@ -2423,7 +2482,8 @@ const App = {
             bCtx.drawImage(sourceLayer.canvas, srcLocalX - rad, srcLocalY - rad, size, size, 0, 0, size, size);
 
             bCtx.globalCompositeOperation = 'destination-in';
-            const gradient = bCtx.createRadialGradient(rad, rad, rad * (settings.brushHardness/100), rad, rad, rad);
+            const r0 = Math.min(rad * (settings.brushHardness/100), rad - 0.1);
+            const gradient = bCtx.createRadialGradient(rad, rad, r0, rad, rad, rad);
             gradient.addColorStop(0, 'rgba(0,0,0,1)');
             gradient.addColorStop(1, 'rgba(0,0,0,0)');
             bCtx.fillStyle = gradient;
