@@ -1145,15 +1145,17 @@ const App = {
                 ovCtx.restore();
 
                 // Draw outline (ants)
-                if(project.selection.pathFunc) {
-                    ovCtx.beginPath();
-                    project.selection.pathFunc(ovCtx);
+                if(project.selection.outlinePath) {
+                    ovCtx.save();
                     ovCtx.strokeStyle = 'white'; ovCtx.lineWidth = 2;
                     ovCtx.setLineDash([6, 4]);
-                    ovCtx.stroke();
+                    ovCtx.stroke(project.selection.outlinePath);
+
                     ovCtx.strokeStyle = 'black'; ovCtx.lineWidth = 2;
                     ovCtx.lineDashOffset = 6;
-                    ovCtx.stroke();
+                    ovCtx.stroke(project.selection.outlinePath);
+                    ovCtx.restore();
+
                     ovCtx.canvas.classList.add('ants');
                 }
             } else {
@@ -1983,20 +1985,19 @@ const App = {
             const imgData = ctx.getImageData(0, 0, w, h);
             const data = imgData.data;
 
-            // Generate pathFunc using marching squares or edge detection
-            selection.pathFunc = (c) => {
-                 this.marchingSquares(c, data, w, h);
-            };
+            const path = new Path2D();
+            this.marchingSquares(path, data, w, h);
+            selection.outlinePath = path;
+            selection.pathFunc = null; // Deprecated
         },
 
-        marchingSquares(ctx, data, width, height) {
+        marchingSquares(path, data, width, height) {
             const getState = (x, y) => {
                 if(x < 0 || x >= width || y < 0 || y >= height) return 0;
                 return data[(y * width + x) * 4 + 3] > 127 ? 1 : 0;
             };
 
-            // Optimization: Iterate with stride 2 for performance, or 1 for accuracy.
-            // Stride 1 is safer for small selections.
+            // Use Stride 1 for accuracy on small details
             for (let y = 0; y < height - 1; y++) {
                 for (let x = 0; x < width - 1; x++) {
                     const tl = getState(x, y);
@@ -2013,20 +2014,20 @@ const App = {
                     const d = {x: x,       y: y + 0.5}; // Left
 
                     switch(index) {
-                        case 1: ctx.moveTo(d.x, d.y); ctx.lineTo(c.x, c.y); break;
-                        case 2: ctx.moveTo(b.x, b.y); ctx.lineTo(c.x, c.y); break;
-                        case 3: ctx.moveTo(d.x, d.y); ctx.lineTo(b.x, b.y); break;
-                        case 4: ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); break;
-                        case 5: ctx.moveTo(a.x, a.y); ctx.lineTo(d.x, d.y); ctx.moveTo(b.x, b.y); ctx.lineTo(c.x, c.y); break;
-                        case 6: ctx.moveTo(a.x, a.y); ctx.lineTo(c.x, c.y); break;
-                        case 7: ctx.moveTo(a.x, a.y); ctx.lineTo(d.x, d.y); break;
-                        case 8: ctx.moveTo(a.x, a.y); ctx.lineTo(d.x, d.y); break;
-                        case 9: ctx.moveTo(a.x, a.y); ctx.lineTo(c.x, c.y); break;
-                        case 10: ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.moveTo(c.x, c.y); ctx.lineTo(d.x, d.y); break;
-                        case 11: ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); break;
-                        case 12: ctx.moveTo(d.x, d.y); ctx.lineTo(b.x, b.y); break;
-                        case 13: ctx.moveTo(b.x, b.y); ctx.lineTo(c.x, c.y); break;
-                        case 14: ctx.moveTo(d.x, d.y); ctx.lineTo(c.x, c.y); break;
+                        case 1: path.moveTo(d.x, d.y); path.lineTo(c.x, c.y); break;
+                        case 2: path.moveTo(b.x, b.y); path.lineTo(c.x, c.y); break;
+                        case 3: path.moveTo(d.x, d.y); path.lineTo(b.x, b.y); break;
+                        case 4: path.moveTo(a.x, a.y); path.lineTo(b.x, b.y); break;
+                        case 5: path.moveTo(a.x, a.y); path.lineTo(d.x, d.y); path.moveTo(b.x, b.y); path.lineTo(c.x, c.y); break;
+                        case 6: path.moveTo(a.x, a.y); path.lineTo(c.x, c.y); break;
+                        case 7: path.moveTo(a.x, a.y); path.lineTo(d.x, d.y); break;
+                        case 8: path.moveTo(a.x, a.y); path.lineTo(d.x, d.y); break;
+                        case 9: path.moveTo(a.x, a.y); path.lineTo(c.x, c.y); break;
+                        case 10: path.moveTo(a.x, a.y); path.lineTo(b.x, b.y); path.moveTo(c.x, c.y); path.lineTo(d.x, d.y); break;
+                        case 11: path.moveTo(a.x, a.y); path.lineTo(b.x, b.y); break;
+                        case 12: path.moveTo(d.x, d.y); path.lineTo(b.x, b.y); break;
+                        case 13: path.moveTo(b.x, b.y); path.lineTo(c.x, c.y); break;
+                        case 14: path.moveTo(d.x, d.y); path.lineTo(c.x, c.y); break;
                     }
                 }
             }
@@ -2122,7 +2123,7 @@ const App = {
                 return;
             }
 
-            const tolerance = project.selection.wandTolerance || 30;
+            const tolerance = project.selection.wandTolerance || 40; // Default to 40
             const contiguous = App.State.toolSettings.wandContiguous !== false;
 
             const maskCvs = this.computeColorMask(layer, lx, ly, tolerance, contiguous);
@@ -2194,7 +2195,7 @@ const App = {
             // We lose the pathFunc if it was vector. We revert to raster mask behavior.
             project.selection.mask = newMask;
             project.selection.type = 'inverted';
-            project.selection.pathFunc = null; // Outline will need raster fallback
+            project.selection.pathFunc = null; // Deprecated
 
             // We should generate an outline for the inverted selection too
             this.generateSelectionOutline(project.selection);
@@ -2211,12 +2212,15 @@ const App = {
             ctx.fillStyle = 'white';
             ctx.fillRect(0, 0, mask.width, mask.height);
 
+            const p = new Path2D();
+            p.rect(0, 0, mask.width, mask.height);
+
             project.selection = {
                 active: true,
                 mask: mask,
                 type: 'all',
-                pathFunc: (c) => c.rect(0,0,mask.width,mask.height),
-                wandTolerance: project.selection.wandTolerance || 30
+                outlinePath: p,
+                wandTolerance: project.selection.wandTolerance || 40
             };
             App.Render.update();
         },
@@ -2582,23 +2586,28 @@ const App = {
             mask.width = project.width; mask.height = project.height;
             const ctx = mask.getContext('2d');
             ctx.fillStyle = 'white'; ctx.beginPath();
-            let pathFunc = null;
+
+            let outlinePath = new Path2D();
+
             if(type === 'rect') {
                 ctx.rect(start.x, start.y, end.x - start.x, end.y - start.y);
-                pathFunc = (c) => c.rect(start.x, start.y, end.x - start.x, end.y - start.y);
+                outlinePath.rect(start.x, start.y, end.x - start.x, end.y - start.y);
             } else if (type === 'oval') {
                 const rx = Math.abs(end.x - start.x)/2;
                 const ry = Math.abs(end.y - start.y)/2;
                 const cx = Math.min(start.x, end.x) + rx;
                 const cy = Math.min(start.y, end.y) + ry;
                 ctx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
-                pathFunc = (c) => c.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
+                outlinePath.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
             } else if (type === 'lasso') {
                 if(path.length < 3) return;
                 ctx.moveTo(path[0].x, path[0].y);
                 for(let i=1; i<path.length; i++) ctx.lineTo(path[i].x, path[i].y);
                 ctx.closePath();
-                pathFunc = (c) => { c.moveTo(path[0].x, path[0].y); for(let i=1; i<path.length; i++) c.lineTo(path[i].x, path[i].y); c.closePath(); }
+
+                outlinePath.moveTo(path[0].x, path[0].y);
+                for(let i=1; i<path.length; i++) outlinePath.lineTo(path[i].x, path[i].y);
+                outlinePath.closePath();
             }
             ctx.fill();
 
@@ -2610,7 +2619,7 @@ const App = {
                 // Re-generate outline
                 this.generateSelectionOutline(project.selection);
             } else {
-                project.selection = { active: true, mask: mask, type: type, pathFunc: pathFunc, wandTolerance: project.selection.wandTolerance || 30 };
+                project.selection = { active: true, mask: mask, type: type, outlinePath: outlinePath, wandTolerance: project.selection.wandTolerance || 40 };
             }
 
             App.Render.update();
@@ -2634,16 +2643,23 @@ const App = {
             const maskCvs = this.computeColorMask(layer, lx, ly, tolerance, contiguous);
             if(!maskCvs) return;
 
-            // Dilate mask to cover anti-aliased edges
+            // Dilate mask to cover anti-aliased edges (Robust 8-way dilation)
             const mCtx = maskCvs.getContext('2d');
-            const tempMask = document.createElement('canvas');
-            tempMask.width = maskCvs.width; tempMask.height = maskCvs.height;
-            tempMask.getContext('2d').drawImage(maskCvs, 0, 0);
 
-            mCtx.drawImage(tempMask, 1, 0);
-            mCtx.drawImage(tempMask, -1, 0);
-            mCtx.drawImage(tempMask, 0, 1);
-            mCtx.drawImage(tempMask, 0, -1);
+            const performDilation = () => {
+                const temp = document.createElement('canvas');
+                temp.width = maskCvs.width; temp.height = maskCvs.height;
+                temp.getContext('2d').drawImage(maskCvs, 0, 0);
+
+                const offsets = [
+                    [1,0], [-1,0], [0,1], [0,-1],
+                    [1,1], [1,-1], [-1,1], [-1,-1]
+                ];
+                offsets.forEach(o => mCtx.drawImage(temp, o[0], o[1]));
+            };
+
+            performDilation();
+            performDilation(); // Second pass to close small holes
 
             // 2. Prepare Fill Pattern/Color
             const settings = App.State.toolSettings;
@@ -2685,8 +2701,35 @@ const App = {
         applyDrawToLayer(layer, drawFn) {
             const ctx = layer.canvas.getContext('2d');
             const oCtx = layer.originalCanvas.getContext('2d');
-            // Assuming 1:1 mapping for simplicity in this function
-            drawFn(ctx); drawFn(oCtx);
+
+            const selMask = this.getSelectionMaskForLayer(layer);
+
+            if (selMask) {
+                // Draw shape to temp canvas
+                const temp = document.createElement('canvas');
+                temp.width = layer.canvas.width;
+                temp.height = layer.canvas.height;
+                const tCtx = temp.getContext('2d');
+
+                drawFn(tCtx); // Draw shape on transparent temp
+
+                // Mask it
+                tCtx.globalCompositeOperation = 'destination-in';
+                tCtx.drawImage(selMask, 0, 0);
+
+                // Draw to layer
+                ctx.save();
+                ctx.drawImage(temp, 0, 0);
+                ctx.restore();
+
+                oCtx.save();
+                oCtx.drawImage(temp, 0, 0);
+                oCtx.restore();
+            } else {
+                // No selection, draw directly
+                drawFn(ctx);
+                drawFn(oCtx);
+            }
         }
     },
 
