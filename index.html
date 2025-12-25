@@ -1504,6 +1504,14 @@ const App = {
                 }
             });
 
+        // Shortcuts
+        window.addEventListener('keydown', e => {
+             if((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+                 e.preventDefault();
+                 App.Tools.clearSelection();
+             }
+        });
+
             area.addEventListener('wheel', e => {
                 const project = App.getActiveProject();
                 if(!project) return;
@@ -1944,8 +1952,8 @@ const App = {
                         App.History.push();
                     }
                 }
-                else if(tool === 'sel-rect') this.createSelectionMask('rect', App.State.drawStart, pos, e.shiftKey, e.altKey);
-                else if(tool === 'sel-oval') this.createSelectionMask('oval', App.State.drawStart, pos, e.shiftKey, e.altKey);
+                else if(tool === 'sel-rect') this.createSelectionMask('rect', App.State.drawStart, pos, null, e.shiftKey, e.altKey);
+                else if(tool === 'sel-oval') this.createSelectionMask('oval', App.State.drawStart, pos, null, e.shiftKey, e.altKey);
                 else if(tool === 'sel-lasso') this.createSelectionMask('lasso', null, null, project.selection.tempPath, e.shiftKey, e.altKey);
                 else if (['paint','eraser','clone','smudge'].includes(tool)) {
                     const layer = App.Layers.getActive();
