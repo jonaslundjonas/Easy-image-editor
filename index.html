@@ -2615,7 +2615,16 @@ const App = {
 
             const canvasWrap = document.getElementById('canvas-wrapper');
             canvasWrap.className = ''; 
-            if(tool === 'clone') canvasWrap.classList.add('is-cloning');
+            if(tool === 'clone') {
+                canvasWrap.classList.add('is-cloning');
+                if (App.State.cloneSource) {
+                    const ind = document.getElementById('clone-source-indicator');
+                    ind.style.display = 'block';
+                }
+            } else {
+                document.getElementById('clone-source-indicator').style.display = 'none';
+            }
+
             if(['rect', 'line', 'arrow', 'text'].includes(tool)) canvasWrap.classList.add('is-drawing');
             if(['sel-rect', 'sel-oval', 'sel-lasso', 'sel-wand'].includes(tool)) canvasWrap.classList.add('is-selecting');
             if(tool === 'text') document.getElementById('canvas-area').style.cursor = 'text';
