@@ -1084,24 +1084,24 @@ const App = {
             ovCtx.clearRect(0, 0, ovCtx.canvas.width, ovCtx.canvas.height);
             
             if(project.selection.active && project.selection.mask) {
+                // Draw mask overlay (semi-transparent blue)
                 ovCtx.save();
                 ovCtx.globalAlpha = 0.2;
                 ovCtx.fillStyle = '#6366f1';
                 ovCtx.drawImage(project.selection.mask, 0, 0);
                 ovCtx.restore();
 
-                if(project.selection.type !== 'wand') {
-                    if(project.selection.pathFunc) {
-                        ovCtx.beginPath();
-                        project.selection.pathFunc(ovCtx);
-                        ovCtx.strokeStyle = 'white'; ovCtx.lineWidth = 2;
-                        ovCtx.setLineDash([6, 4]);
-                        ovCtx.stroke();
-                        ovCtx.strokeStyle = 'black'; ovCtx.lineWidth = 2;
-                        ovCtx.lineDashOffset = 6;
-                        ovCtx.stroke();
-                        ovCtx.canvas.classList.add('ants');
-                    }
+                // Draw outline (ants)
+                if(project.selection.pathFunc) {
+                    ovCtx.beginPath();
+                    project.selection.pathFunc(ovCtx);
+                    ovCtx.strokeStyle = 'white'; ovCtx.lineWidth = 2;
+                    ovCtx.setLineDash([6, 4]);
+                    ovCtx.stroke();
+                    ovCtx.strokeStyle = 'black'; ovCtx.lineWidth = 2;
+                    ovCtx.lineDashOffset = 6;
+                    ovCtx.stroke();
+                    ovCtx.canvas.classList.add('ants');
                 }
             } else {
                 ovCtx.canvas.classList.remove('ants');
@@ -1181,13 +1181,11 @@ const App = {
         },
 
         renderLayer(layer) {
-            // Apply filters from originalCanvas to canvas
             const ctx = layer.canvas.getContext('2d');
             const f = layer.filters;
 
             ctx.clearRect(0,0, layer.canvas.width, layer.canvas.height);
             
-            // Use temp canvas for filtering
             const tempC = document.createElement('canvas');
             tempC.width = layer.canvas.width; tempC.height = layer.canvas.height;
             const tCtx = tempC.getContext('2d');
@@ -1209,8 +1207,29 @@ const App = {
                 if(f.pixelate > 0) this.applyPixelate(tCtx, tempC.width, tempC.height, f.pixelate);
             }
 
-            // Draw filtered result back to main layer canvas
-            ctx.drawImage(tempC, 0, 0);
+            // If selection active, we must mask the result.
+            // Filter result is in tempC. Original is in layer.originalCanvas.
+            // We want: Selection ? (tempC where Mask) + (Original where !Mask) : tempC.
+
+            const selMask = App.Tools.getSelectionMaskForLayer(layer);
+            if(selMask) {
+                 // 1. Draw Original Unfiltered
+                 ctx.drawImage(layer.originalCanvas, 0, 0);
+
+                 // 2. Draw Filtered (tempC) masked by selMask
+                 const maskedCvs = document.createElement('canvas');
+                 maskedCvs.width = layer.canvas.width; maskedCvs.height = layer.canvas.height;
+                 const mCtx = maskedCvs.getContext('2d');
+
+                 mCtx.drawImage(tempC, 0, 0);
+                 mCtx.globalCompositeOperation = 'destination-in';
+                 mCtx.drawImage(selMask, 0, 0);
+
+                 // 3. Draw Masked Filtered on top
+                 ctx.drawImage(maskedCvs, 0, 0);
+            } else {
+                 ctx.drawImage(tempC, 0, 0);
+            }
 
             App.Render.update();
         },
@@ -1584,7 +1603,7 @@ const App = {
             }
             
             if(tool === 'sel-wand') {
-                this.performMagicWand(pos);
+                this.performMagicWandWithOpts(pos, e.shiftKey, e.altKey);
             }
 
             if(tool === 'paint' || tool === 'eraser' || tool === 'sel-brush' || tool === 'smudge') {
@@ -1851,7 +1870,73 @@ const App = {
             }
         },
 
+        generateSelectionOutline(selection) {
+            if(!selection.mask) return;
+            const w = selection.mask.width;
+            const h = selection.mask.height;
+            const ctx = selection.mask.getContext('2d');
+            const imgData = ctx.getImageData(0, 0, w, h);
+            const data = imgData.data;
+
+            // Generate pathFunc using marching squares or edge detection
+            selection.pathFunc = (c) => {
+                 this.marchingSquares(c, data, w, h);
+            };
+        },
+
+        marchingSquares(ctx, data, width, height) {
+            const getState = (x, y) => {
+                if(x < 0 || x >= width || y < 0 || y >= height) return 0;
+                return data[(y * width + x) * 4 + 3] > 127 ? 1 : 0;
+            };
+
+            // Optimization: Iterate with stride 2 for performance, or 1 for accuracy.
+            // Stride 1 is safer for small selections.
+            for (let y = 0; y < height - 1; y++) {
+                for (let x = 0; x < width - 1; x++) {
+                    const tl = getState(x, y);
+                    const tr = getState(x + 1, y);
+                    const br = getState(x + 1, y + 1);
+                    const bl = getState(x, y + 1);
+
+                    const index = (tl << 3) | (tr << 2) | (br << 1) | bl;
+                    if (index === 0 || index === 15) continue;
+
+                    const a = {x: x + 0.5, y: y};       // Top
+                    const b = {x: x + 1,   y: y + 0.5}; // Right
+                    const c = {x: x + 0.5, y: y + 1};   // Bottom
+                    const d = {x: x,       y: y + 0.5}; // Left
+
+                    switch(index) {
+                        case 1: ctx.moveTo(d.x, d.y); ctx.lineTo(c.x, c.y); break;
+                        case 2: ctx.moveTo(b.x, b.y); ctx.lineTo(c.x, c.y); break;
+                        case 3: ctx.moveTo(d.x, d.y); ctx.lineTo(b.x, b.y); break;
+                        case 4: ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); break;
+                        case 5: ctx.moveTo(a.x, a.y); ctx.lineTo(d.x, d.y); ctx.moveTo(b.x, b.y); ctx.lineTo(c.x, c.y); break;
+                        case 6: ctx.moveTo(a.x, a.y); ctx.lineTo(c.x, c.y); break;
+                        case 7: ctx.moveTo(a.x, a.y); ctx.lineTo(d.x, d.y); break;
+                        case 8: ctx.moveTo(a.x, a.y); ctx.lineTo(d.x, d.y); break;
+                        case 9: ctx.moveTo(a.x, a.y); ctx.lineTo(c.x, c.y); break;
+                        case 10: ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.moveTo(c.x, c.y); ctx.lineTo(d.x, d.y); break;
+                        case 11: ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); break;
+                        case 12: ctx.moveTo(d.x, d.y); ctx.lineTo(b.x, b.y); break;
+                        case 13: ctx.moveTo(b.x, b.y); ctx.lineTo(c.x, c.y); break;
+                        case 14: ctx.moveTo(d.x, d.y); ctx.lineTo(c.x, c.y); break;
+                    }
+                }
+            }
+        },
+
         performMagicWand(pos) {
+            const layer = App.Layers.getActive();
+            const project = App.getActiveProject();
+            if(!layer || !project) return;
+
+            // Redirect to logic with opts (defaults)
+            this.performMagicWandWithOpts(pos, false, false);
+        },
+
+        performMagicWandWithOpts(pos, isAdd, isSubtract) {
             const layer = App.Layers.getActive();
             const project = App.getActiveProject();
             if(!layer || !project) return;
@@ -1883,9 +1968,11 @@ const App = {
 
             visited[ly * w + lx] = 1;
 
+            // Improved matching using Euclidean distance
             const match = (idx) => {
                 const r = data[idx], g = data[idx+1], b = data[idx+2], a = data[idx+3];
-                return Math.abs(r-sr)<=tolerance && Math.abs(g-sg)<=tolerance && Math.abs(b-sb)<=tolerance && Math.abs(a-sa)<=tolerance;
+                const dist = Math.sqrt(Math.pow(r-sr,2) + Math.pow(g-sg,2) + Math.pow(b-sb,2) + Math.pow(a-sa,2));
+                return dist <= tolerance;
             };
 
             while(stack.length) {
@@ -1916,10 +2003,10 @@ const App = {
 
             mCtx.putImageData(mImgData, 0, 0);
 
-            // Project to Global Selection Mask
-            const finalMask = document.createElement('canvas');
-            finalMask.width = project.width; finalMask.height = project.height;
-            const fCtx = finalMask.getContext('2d');
+            // Project new selection part to Global Selection Mask
+            const partMask = document.createElement('canvas');
+            partMask.width = project.width; partMask.height = project.height;
+            const fCtx = partMask.getContext('2d');
 
             const cx = layer.x + layer.width/2;
             const cy = layer.y + layer.height/2;
@@ -1928,8 +2015,118 @@ const App = {
 
             fCtx.drawImage(maskCvs, -layer.width/2, -layer.height/2, layer.width, layer.height);
 
-            project.selection = { active: true, mask: finalMask, type: 'wand' };
+            // Combine with existing selection
+            if(project.selection.active && project.selection.mask && (isAdd || isSubtract)) {
+                const globalCtx = project.selection.mask.getContext('2d');
+                globalCtx.globalCompositeOperation = isSubtract ? 'destination-out' : 'source-over';
+                globalCtx.drawImage(partMask, 0, 0);
+                // Keep type as wand but maybe mixed.
+                project.selection.type = 'wand';
+            } else {
+                project.selection = { active: true, mask: partMask, type: 'wand', wandTolerance: tolerance };
+            }
+
+            // Generate Outline
+            this.generateSelectionOutline(project.selection);
+
             App.Render.update();
+        },
+
+        clearSelection() {
+            const project = App.getActiveProject();
+            if(project) {
+                project.selection = { active: false, mask: null, type: null, wandTolerance: project.selection.wandTolerance };
+                App.Render.update();
+            }
+        },
+
+        invertSelection() {
+            const project = App.getActiveProject();
+            if(!project || !project.selection.active || !project.selection.mask) {
+                // If no selection, select all?
+                // Usually Invert on nothing means Select All.
+                this.selectAll();
+                return;
+            }
+
+            const mask = project.selection.mask;
+            const w = mask.width;
+            const h = mask.height;
+
+            const newMask = document.createElement('canvas');
+            newMask.width = w; newMask.height = h;
+            const ctx = newMask.getContext('2d');
+
+            // Fill white (Select All)
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, w, h);
+
+            // Cut out existing selection
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.drawImage(mask, 0, 0);
+
+            // Update selection
+            // We lose the pathFunc if it was vector. We revert to raster mask behavior.
+            project.selection.mask = newMask;
+            project.selection.type = 'inverted';
+            project.selection.pathFunc = null; // Outline will need raster fallback
+
+            // We should generate an outline for the inverted selection too
+            this.generateSelectionOutline(project.selection);
+
+            App.Render.update();
+        },
+
+        selectAll() {
+            const project = App.getActiveProject();
+            if(!project) return;
+            const mask = document.createElement('canvas');
+            mask.width = project.width; mask.height = project.height;
+            const ctx = mask.getContext('2d');
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, mask.width, mask.height);
+
+            project.selection = {
+                active: true,
+                mask: mask,
+                type: 'all',
+                pathFunc: (c) => c.rect(0,0,mask.width,mask.height),
+                wandTolerance: project.selection.wandTolerance || 30
+            };
+            App.Render.update();
+        },
+
+        getSelectionMaskForLayer(layer) {
+            const project = App.getActiveProject();
+            if(!project.selection.active || !project.selection.mask) return null;
+
+            const mask = document.createElement('canvas');
+            mask.width = layer.canvas.width; // Local raster size
+            mask.height = layer.canvas.height;
+            const ctx = mask.getContext('2d');
+
+            // Transform: We want to draw the Global Mask into the Local Space.
+            // Local Space is unrotated, scaled to raster.
+
+            const cx = layer.x + layer.width/2;
+            const cy = layer.y + layer.height/2;
+            const angle = (layer.rotation || 0) * Math.PI / 180;
+
+            ctx.save();
+            // 1. Move origin to center of local space
+            ctx.translate(layer.canvas.width/2, layer.canvas.height/2);
+            // 2. Scale from Display Size to Raster Size (if different)
+            ctx.scale(layer.canvas.width / layer.width, layer.canvas.height / layer.height);
+            // 3. Reverse Rotation
+            ctx.rotate(-angle);
+            // 4. Translate back relative to Global Center
+            ctx.translate(-cx, -cy);
+
+            // Draw Global Mask
+            ctx.drawImage(project.selection.mask, 0, 0);
+            ctx.restore();
+
+            return mask;
         },
 
         // Helper: Convert global mask coords to selection? No, selection is global.
@@ -2002,16 +2199,37 @@ const App = {
             ctx.save();
             if(isEraser) ctx.globalCompositeOperation = 'destination-out';
             ctx.globalAlpha = settings.brushOpacity / 100;
-            ctx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
+
+            const selMask = this.getSelectionMaskForLayer(layer);
+
+            if(selMask) {
+                 // Optimization: reuse a shared temp canvas if possible, but creates are ok for now.
+                 const strokeCvs = document.createElement('canvas');
+                 strokeCvs.width = layer.canvas.width; strokeCvs.height = layer.canvas.height;
+                 const sCtx = strokeCvs.getContext('2d');
+
+                 sCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
+                 sCtx.globalCompositeOperation = 'destination-in';
+                 sCtx.drawImage(selMask, 0, 0);
+
+                 ctx.drawImage(strokeCvs, 0, 0);
+
+                 oCtx.save();
+                 if(isEraser) oCtx.globalCompositeOperation = 'destination-out';
+                 oCtx.globalAlpha = settings.brushOpacity / 100;
+                 oCtx.drawImage(strokeCvs, 0, 0);
+                 oCtx.restore();
+            } else {
+                 ctx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
+
+                 oCtx.save();
+                 if(isEraser) oCtx.globalCompositeOperation = 'destination-out';
+                 oCtx.globalAlpha = settings.brushOpacity / 100;
+                 oCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
+                 oCtx.restore();
+            }
+
             ctx.restore();
-
-            // Mirror
-            oCtx.save();
-            if(isEraser) oCtx.globalCompositeOperation = 'destination-out';
-            oCtx.globalAlpha = settings.brushOpacity / 100;
-            oCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
-            oCtx.restore();
-
             App.Render.update();
         },
 
@@ -2065,30 +2283,12 @@ const App = {
             const size = settings.brushSize;
             const rad = size / 2;
 
-            // Calculate source position in global space
-            // destPos passed here is local to layer (scaled).
-            // We need to un-local it to get global?
-            // Wait, in handleMove:
-            // if (tool === 'clone') this.paintClone(localPos);
-            // So destPos is local to DEST layer.
-
-            // But cloneOffset = pos (Global) - cloneSource (Global).
-            // So we need Global Dest to get Global Source.
-            // Global Dest = (destPos * layer.width / layer.canvas.width) + layer.x ??
-
-            // This is getting complicated with scaling.
-            // Let's simplify: Clone source is captured globally.
-            // But painting is done locally on the layer canvas.
-
-            // If we assume layers are 1:1 for now or close enough.
-            // Or better: Re-calculate global dest from local destPos.
             const destGlobalX = (destPos.x / layer.canvas.width) * layer.width + layer.x;
             const destGlobalY = (destPos.y / layer.canvas.height) * layer.height + layer.y;
 
             const srcGlobalX = destGlobalX - App.State.cloneOffset.x;
             const srcGlobalY = destGlobalY - App.State.cloneOffset.y;
 
-            // Map Global Source to Source Layer Local
             const srcLocalX = (srcGlobalX - sourceLayer.x) * (sourceLayer.canvas.width / sourceLayer.width);
             const srcLocalY = (srcGlobalY - sourceLayer.y) * (sourceLayer.canvas.height / sourceLayer.height);
 
@@ -2096,10 +2296,8 @@ const App = {
             brushCvs.width = size; brushCvs.height = size;
             const bCtx = brushCvs.getContext('2d');
 
-            // Draw from source layer
             bCtx.drawImage(sourceLayer.canvas, srcLocalX - rad, srcLocalY - rad, size, size, 0, 0, size, size);
 
-            // Apply hardness (gradient mask)
             bCtx.globalCompositeOperation = 'destination-in';
             const gradient = bCtx.createRadialGradient(rad, rad, rad * (settings.brushHardness/100), rad, rad, rad);
             gradient.addColorStop(0, 'rgba(0,0,0,1)');
@@ -2107,11 +2305,24 @@ const App = {
             bCtx.fillStyle = gradient;
             bCtx.fillRect(0, 0, size, size);
 
-            // Draw to dest
+            const selMask = this.getSelectionMaskForLayer(layer);
+
             const drawTo = (targetCtx) => {
                 targetCtx.save();
                 targetCtx.globalAlpha = settings.brushOpacity / 100;
-                targetCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
+
+                if(selMask) {
+                     const sCvs = document.createElement('canvas');
+                     sCvs.width = layer.canvas.width; sCvs.height = layer.canvas.height;
+                     const sCtx = sCvs.getContext('2d');
+                     sCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
+                     sCtx.globalCompositeOperation = 'destination-in';
+                     sCtx.drawImage(selMask, 0, 0);
+                     targetCtx.drawImage(sCvs, 0, 0);
+                } else {
+                    targetCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
+                }
+
                 targetCtx.restore();
             };
 
