@@ -712,12 +712,25 @@
         <div class="modal">
             <h3>Resize Image</h3>
             <div class="control-group">
-                <label>Width (px)</label>
-                <input type="number" id="resize-w" placeholder="Width">
+                <label>Unit</label>
+                <select id="resize-unit" onchange="App.UI.updateResizeUnit()">
+                    <option value="px">Pixels</option>
+                    <option value="percent">Percent</option>
+                </select>
             </div>
             <div class="control-group">
-                <label>Height (px)</label>
-                <input type="number" id="resize-h" placeholder="Height">
+                <label>Width</label>
+                <input type="number" id="resize-w" placeholder="Width" oninput="App.UI.syncResize('w')">
+            </div>
+            <div class="control-group">
+                <label>Height</label>
+                <input type="number" id="resize-h" placeholder="Height" oninput="App.UI.syncResize('h')">
+            </div>
+            <div class="control-group">
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                    <input type="checkbox" id="resize-constrain" checked style="width:auto;">
+                    Constrain Proportions
+                </label>
             </div>
             <div class="modal-actions">
                 <button class="btn" onclick="App.UI.closeModal('resize-modal')">Cancel</button>
@@ -2900,10 +2913,54 @@ const App = {
         openRotateModal() { document.getElementById('custom-rot-val-modal').value = 0; document.getElementById('rotate-modal').classList.add('open'); },
         openResizeModal() {
             const p = App.getActiveProject();
+            if(!p) return;
             document.getElementById('resize-w').value = p.width;
             document.getElementById('resize-h').value = p.height;
+            document.getElementById('resize-unit').value = 'px';
+            document.getElementById('resize-constrain').checked = true;
             document.getElementById('resize-modal').classList.add('open');
+            // Store original ratio
+            App.State.resizeRatio = p.width / p.height;
         },
+
+        updateResizeUnit() {
+            const unit = document.getElementById('resize-unit').value;
+            const wInput = document.getElementById('resize-w');
+            const hInput = document.getElementById('resize-h');
+            const p = App.getActiveProject();
+
+            if(unit === 'percent') {
+                wInput.value = 100;
+                hInput.value = 100;
+            } else {
+                wInput.value = p.width;
+                hInput.value = p.height;
+            }
+        },
+
+        syncResize(source) {
+            if(!document.getElementById('resize-constrain').checked) return;
+
+            const unit = document.getElementById('resize-unit').value;
+            const wInput = document.getElementById('resize-w');
+            const hInput = document.getElementById('resize-h');
+            const ratio = App.State.resizeRatio;
+
+            if(unit === 'percent') {
+                if(source === 'w') hInput.value = wInput.value;
+                else wInput.value = hInput.value;
+            } else {
+                // Pixels
+                if(source === 'w') {
+                    const val = parseFloat(wInput.value);
+                    if(!isNaN(val)) hInput.value = Math.round(val / ratio);
+                } else {
+                    const val = parseFloat(hInput.value);
+                    if(!isNaN(val)) wInput.value = Math.round(val * ratio);
+                }
+            }
+        },
+
         openResizeLayerModal() {
             const layer = App.Layers.getActive();
             if(!layer) return;
@@ -3245,8 +3302,18 @@ const App = {
         
         applyResize() {
             const project = App.getActiveProject();
-            const w = parseInt(document.getElementById('resize-w').value);
-            const h = parseInt(document.getElementById('resize-h').value);
+            let w = parseFloat(document.getElementById('resize-w').value);
+            let h = parseFloat(document.getElementById('resize-h').value);
+            const unit = document.getElementById('resize-unit').value;
+
+            if(unit === 'percent') {
+                w = Math.round(project.width * (w / 100));
+                h = Math.round(project.height * (h / 100));
+            } else {
+                w = parseInt(w);
+                h = parseInt(h);
+            }
+
             if(!w || !h || !project) return;
             project.width = w; project.height = h;
             
