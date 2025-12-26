@@ -710,6 +710,22 @@
         </div>
     </div>
 
+    <!-- Select Similar Modal -->
+    <div class="modal-backdrop" id="select-similar-modal">
+        <div class="modal">
+            <h3>Select Similar</h3>
+            <div class="control-group">
+                <label>Tolerance (0-255)</label>
+                <input type="range" id="similar-tolerance" min="0" max="255" value="30" oninput="document.getElementById('similar-tol-val').innerText=this.value">
+                <span id="similar-tol-val" style="font-size:12px; float:right;">30</span>
+            </div>
+            <div class="modal-actions">
+                <button class="btn" onclick="App.UI.closeModal('select-similar-modal')">Cancel</button>
+                <button class="btn btn-primary" onclick="App.UI.applySelectSimilar()">Apply</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Resize Image Modal -->
     <div class="modal-backdrop" id="resize-modal">
         <div class="modal">
@@ -2192,12 +2208,16 @@ const App = {
                 alert("Please make a selection first to define the target color.");
                 return;
             }
+            App.UI.openSelectSimilarModal();
+        },
+
+        runSelectSimilar(tolerance) {
+            const project = App.getActiveProject();
+            const layer = App.Layers.getActive();
+            if(!project || !layer || !project.selection.active || !project.selection.mask) return;
 
             const localMask = this.getSelectionMaskForLayer(layer);
-            if(!localMask) {
-                 alert("No selection on the active layer.");
-                 return;
-            }
+            if(!localMask) return;
 
             const mCtx = localMask.getContext('2d');
             const mData = mCtx.getImageData(0,0, localMask.width, localMask.height).data;
@@ -2229,7 +2249,8 @@ const App = {
             const sb = bSum / count;
             const sa = aSum / count;
 
-            const tolerance = project.selection.wandTolerance || 30;
+            // Update tolerance preference
+            project.selection.wandTolerance = tolerance;
 
             const resultCvs = document.createElement('canvas');
             resultCvs.width = layer.canvas.width;
@@ -3001,6 +3022,19 @@ const App = {
         closeModal(id) { document.getElementById(id).classList.remove('open'); },
         openSaveModal() { document.getElementById('save-name').value = App.getActiveProject().filename + "-edit"; document.getElementById('save-modal').classList.add('open'); },
         openRotateModal() { document.getElementById('custom-rot-val-modal').value = 0; document.getElementById('rotate-modal').classList.add('open'); },
+        openSelectSimilarModal() {
+            const p = App.getActiveProject();
+            if(!p) return;
+            const val = p.selection.wandTolerance || 30;
+            document.getElementById('similar-tolerance').value = val;
+            document.getElementById('similar-tol-val').innerText = val;
+            document.getElementById('select-similar-modal').classList.add('open');
+        },
+        applySelectSimilar() {
+            const val = parseInt(document.getElementById('similar-tolerance').value);
+            App.Tools.runSelectSimilar(val);
+            this.closeModal('select-similar-modal');
+        },
         openResizeModal() {
             const p = App.getActiveProject();
             if(!p) return;
