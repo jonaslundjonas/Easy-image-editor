@@ -1686,7 +1686,7 @@ const App = {
                 return;
             }
 
-            if(['rect', 'line', 'arrow', 'sel-rect', 'sel-oval', 'sel-lasso'].includes(tool)) {
+            if(['rect', 'circle', 'line', 'arrow', 'sel-rect', 'sel-oval', 'sel-lasso'].includes(tool)) {
                 App.State.isDrawing = true;
                 App.State.drawStart = pos;
                 if(tool === 'sel-lasso') project.selection.tempPath = [pos];
@@ -1895,7 +1895,7 @@ const App = {
                 ctx.clearRect(0,0, ctx.canvas.width, ctx.canvas.height);
                 if(project.selection.active) App.Render.update();
 
-                if(['rect', 'line', 'arrow'].includes(tool)) this.drawShape(ctx, App.State.drawStart, pos, tool, true);
+                if(['rect', 'circle', 'line', 'arrow'].includes(tool)) this.drawShape(ctx, App.State.drawStart, pos, tool, true);
                 else if(tool === 'sel-rect') this.drawSelectionShape(ctx, App.State.drawStart, pos, 'rect');
                 else if(tool === 'sel-oval') this.drawSelectionShape(ctx, App.State.drawStart, pos, 'oval');
                 else if(tool === 'sel-lasso') {
@@ -1969,7 +1969,7 @@ const App = {
                 const pos = this.getImgPos(e);
                 const project = App.getActiveProject();
                 
-                if(['rect', 'line', 'arrow'].includes(tool)) {
+                if(['rect', 'circle', 'line', 'arrow'].includes(tool)) {
                     const layer = App.Layers.getActive();
                     if(layer) {
                         // Drawing shapes should also be local to layer
@@ -2647,6 +2647,13 @@ const App = {
             ctx.lineWidth = App.State.toolSettings.drawSize;
             ctx.lineCap = 'round'; ctx.lineJoin = 'round';
             if(type === 'rect') ctx.rect(start.x, start.y, end.x - start.x, end.y - start.y);
+            else if (type === 'circle') {
+                const rx = Math.abs(end.x - start.x)/2;
+                const ry = Math.abs(end.y - start.y)/2;
+                const cx = Math.min(start.x, end.x) + rx;
+                const cy = Math.min(start.y, end.y) + ry;
+                ctx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
+            }
             else if (type === 'line') { ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y); }
             else if (type === 'arrow') {
                 const headlen = App.State.toolSettings.drawSize * 4; 
@@ -2871,6 +2878,7 @@ const App = {
             'smudge': { icon: 'ph-hand-pointing', title: 'Smudge Tool' },
             'eraser': { icon: 'ph-eraser', title: 'Eraser' },
             'rect': { icon: 'ph-rectangle', title: 'Draw Rectangle' },
+            'circle': { icon: 'ph-circle', title: 'Draw Circle' },
             'line': { icon: 'ph-line-segment', title: 'Draw Line' },
             'arrow': { icon: 'ph-arrow-up-right', title: 'Draw Arrow' }
         },
@@ -2884,7 +2892,7 @@ const App = {
             { id: 'grp-draw', tools: ['paint', 'bucket'] },
             { id: 'grp-retouch', tools: ['clone', 'smudge'] },
             { id: 'grp-eraser', tools: ['eraser'] },
-            { id: 'grp-shape', tools: ['rect', 'line', 'arrow'] },
+            { id: 'grp-shape', tools: ['rect', 'circle', 'line', 'arrow'] },
             { id: 'grp-text', tools: ['text'] },
             { id: 'grp-zoom', tools: ['zoom'] }
         ],
@@ -3379,7 +3387,7 @@ const App = {
                     </div>
                     <div style="font-size:11px; margin-top:10px; color:#888;">Click on canvas to add text. Select text layer to edit.</div>
                 `;
-            } else if(['rect', 'line', 'arrow'].includes(tool)) {
+            } else if(['rect', 'circle', 'line', 'arrow'].includes(tool)) {
                 html += `
                     <div class="control-group"><div class="control-label"><span>Thickness</span></div><input type="number" id="opt-size" value="${App.State.toolSettings.drawSize}" min="1" max="50"></div>
                 `;
