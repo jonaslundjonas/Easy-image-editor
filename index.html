@@ -191,7 +191,7 @@
             pointer-events: none;
         }
         .flyout-menu {
-            position: absolute; left: 100%; top: 0;
+            position: fixed; left: 0; top: 0;
             background: var(--bg-panel); border: 1px solid var(--border);
             border-radius: 4px; padding: 4px;
             display: none; grid-template-columns: repeat(1, 1fr); gap: 4px;
@@ -1919,7 +1919,8 @@ const App = {
                             const y = localLast.y + (localPos.y - localLast.y) * t;
                             if(tool === 'smudge') {
                                 // For smudge, use the previous calculated point as source
-                                const prevT = Math.max(0, t - 1/steps);
+                                // Ensure we step meaningfully
+                                const prevT = Math.max(0, t - 1.0/Math.max(1, steps));
                                 const sourceX = localLast.x + (localPos.x - localLast.x) * prevT;
                                 const sourceY = localLast.y + (localPos.y - localLast.y) * prevT;
                                 this.paintSmudge({x: sourceX, y: sourceY}, {x, y});
@@ -3213,15 +3214,23 @@ const App = {
                 const group = e.target.closest('.tool-group');
                 if(!group) return;
 
-                // If clicking inside flyout, handle normally (click event)
-                if(e.target.closest('.flyout-menu')) return;
+                // If clicking inside flyout, handle normally
+                if(e.target.closest('.flyout-menu')) {
+                    longPressTriggered = false; // Ensure we don't block the click
+                    return;
+                }
 
                 longPressTriggered = false;
                 timer = setTimeout(() => {
                     longPressTriggered = true;
                     closeFlyouts();
                     const flyout = group.querySelector('.flyout-menu');
-                    if(flyout) flyout.classList.add('open');
+                    if(flyout) {
+                        const rect = group.getBoundingClientRect();
+                        flyout.style.left = rect.right + 'px';
+                        flyout.style.top = rect.top + 'px';
+                        flyout.classList.add('open');
+                    }
                 }, 400); // 400ms long press
             });
 
@@ -3235,7 +3244,12 @@ const App = {
                     e.preventDefault();
                     closeFlyouts();
                     const flyout = group.querySelector('.flyout-menu');
-                    if(flyout) flyout.classList.add('open');
+                    if(flyout) {
+                        const rect = group.getBoundingClientRect();
+                        flyout.style.left = rect.right + 'px';
+                        flyout.style.top = rect.top + 'px';
+                        flyout.classList.add('open');
+                    }
                 }
             });
 
