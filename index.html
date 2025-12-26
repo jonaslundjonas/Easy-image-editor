@@ -400,6 +400,9 @@
                     <div class="dropdown-item" onclick="App.Tools.selectAll()">
                         <i class="ph ph-selection-all"></i> Select All <span style="margin-left:auto; font-size:10px; color:#666;">Ctrl+A</span>
                     </div>
+                    <div class="dropdown-item" onclick="App.Tools.selectSimilar()">
+                        <i class="ph ph-circles-three-plus"></i> Select Similar
+                    </div>
                     <div class="dropdown-item" onclick="App.Tools.invertSelection()">
                         <i class="ph ph-swap"></i> Invert Selection
                     </div>
@@ -2180,6 +2183,90 @@ const App = {
                 project.selection = { active: false, mask: null, type: null, wandTolerance: project.selection.wandTolerance };
                 App.Render.update();
             }
+        },
+
+        selectSimilar() {
+            const project = App.getActiveProject();
+            const layer = App.Layers.getActive();
+            if(!project || !layer || !project.selection.active || !project.selection.mask) {
+                alert("Please make a selection first to define the target color.");
+                return;
+            }
+
+            const localMask = this.getSelectionMaskForLayer(layer);
+            if(!localMask) {
+                 alert("No selection on the active layer.");
+                 return;
+            }
+
+            const mCtx = localMask.getContext('2d');
+            const mData = mCtx.getImageData(0,0, localMask.width, localMask.height).data;
+
+            const ctx = layer.canvas.getContext('2d');
+            const imgData = ctx.getImageData(0,0, layer.canvas.width, layer.canvas.height);
+            const data = imgData.data;
+
+            let rSum = 0, gSum = 0, bSum = 0, aSum = 0;
+            let count = 0;
+
+            for(let i=0; i<mData.length; i+=4) {
+                if(mData[i+3] > 127) { // Check alpha of mask
+                     rSum += data[i];
+                     gSum += data[i+1];
+                     bSum += data[i+2];
+                     aSum += data[i+3];
+                     count++;
+                }
+            }
+
+            if(count === 0) {
+                 alert("No pixels selected on the active layer to sample from.");
+                 return;
+            }
+
+            const sr = rSum / count;
+            const sg = gSum / count;
+            const sb = bSum / count;
+            const sa = aSum / count;
+
+            const tolerance = project.selection.wandTolerance || 30;
+
+            const resultCvs = document.createElement('canvas');
+            resultCvs.width = layer.canvas.width;
+            resultCvs.height = layer.canvas.height;
+            const rCtx = resultCvs.getContext('2d');
+            const rImgData = rCtx.createImageData(resultCvs.width, resultCvs.height);
+            const rData = rImgData.data;
+
+            for(let i=0; i<data.length; i+=4) {
+                const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
+                const dist = Math.sqrt(Math.pow(r-sr,2) + Math.pow(g-sg,2) + Math.pow(b-sb,2) + Math.pow(a-sa,2));
+
+                if(dist <= tolerance) {
+                    rData[i] = 255; rData[i+1] = 255; rData[i+2] = 255; rData[i+3] = 255;
+                }
+            }
+            rCtx.putImageData(rImgData, 0, 0);
+
+            const partMask = document.createElement('canvas');
+            partMask.width = project.width; partMask.height = project.height;
+            const fCtx = partMask.getContext('2d');
+
+            const cx = layer.x + layer.width/2;
+            const cy = layer.y + layer.height/2;
+
+            fCtx.save();
+            fCtx.translate(cx, cy);
+            fCtx.rotate((layer.rotation || 0) * Math.PI / 180);
+            fCtx.drawImage(resultCvs, -layer.width/2, -layer.height/2, layer.width, layer.height);
+            fCtx.restore();
+
+            const globalCtx = project.selection.mask.getContext('2d');
+            globalCtx.globalCompositeOperation = 'source-over';
+            globalCtx.drawImage(partMask, 0, 0);
+
+            this.generateSelectionOutline(project.selection);
+            App.Render.update();
         },
 
         invertSelection() {
