@@ -111,6 +111,51 @@ def run(playwright):
     # Apply
     page.click('button[onclick="App.UI.applyTransform()"]')
 
+    # 7. Test Select Similar
+    # Reset state
+    page.evaluate("App.IO.createNewProject()")
+    time.sleep(0.5)
+
+    # Draw two red rectangles
+    page.click('button[data-tool="rect"]')
+    page.evaluate("App.State.toolSettings.drawColor = '#ff0000'")
+    page.evaluate("App.State.toolSettings.drawSize = 1")
+
+    page.mouse.move(100, 100)
+    page.mouse.down()
+    page.mouse.move(200, 150)
+    page.mouse.up()
+
+    page.mouse.move(400, 200)
+    page.mouse.down()
+    page.mouse.move(500, 250)
+    page.mouse.up()
+
+    # Fill them
+    page.click('button[data-tool="bucket"]')
+    page.mouse.click(150, 125) # center of first rect
+    page.mouse.click(450, 225) # center of second rect
+
+    time.sleep(0.5)
+    page.screenshot(path="/home/jules/verification/7_select_similar_setup.png")
+
+    # Select a small part of the first rectangle
+    page.click('button[data-tool="sel-rect"]')
+    page.mouse.move(110, 110)
+    page.mouse.down()
+    page.mouse.move(150, 130)
+    page.mouse.up()
+
+    time.sleep(0.5)
+    page.screenshot(path="/home/jules/verification/8_select_similar_initial.png")
+
+    # Trigger Select Similar
+    page.evaluate("App.Tools.selectSimilar()")
+
+    time.sleep(0.5)
+    page.screenshot(path="/home/jules/verification/9_select_similar_result.png")
+
+
     browser.close()
 
 with sync_playwright() as playwright:

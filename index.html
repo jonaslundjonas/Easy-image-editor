@@ -403,6 +403,9 @@
                     <div class="dropdown-item" onclick="App.Tools.invertSelection()">
                         <i class="ph ph-swap"></i> Invert Selection
                     </div>
+                    <div class="dropdown-item" onclick="App.Tools.selectSimilar()">
+                        <i class="ph ph-stack-simple"></i> Select Similar
+                    </div>
                     <div class="dropdown-item" onclick="App.Tools.clearSelection()">
                         <i class="ph ph-x"></i> Deselect
                     </div>
@@ -2172,6 +2175,47 @@ const App = {
             this.generateSelectionOutline(project.selection);
 
             App.Render.update();
+        },
+
+        getSelectionCenter(mask) {
+            const w = mask.width;
+            const h = mask.height;
+            const ctx = mask.getContext('2d');
+            const imgData = ctx.getImageData(0, 0, w, h);
+            const d = imgData.data;
+
+            let minX = w, minY = h, maxX = 0, maxY = 0;
+            let found = false;
+
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    if (d[(y * w + x) * 4 + 3] > 0) {
+                        found = true;
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
+                        if (y < minY) minY = y;
+                        if (y > maxY) maxY = y;
+                    }
+                }
+            }
+
+            if (!found) return null;
+            return { x: Math.floor(minX + (maxX - minX) / 2), y: Math.floor(minY + (maxY - minY) / 2) };
+        },
+
+        selectSimilar() {
+            const project = App.getActiveProject();
+            if (!project || !project.selection.active || !project.selection.mask) return;
+
+            const center = this.getSelectionCenter(project.selection.mask);
+            if (!center) return;
+
+            const originalContiguous = App.State.toolSettings.wandContiguous;
+            App.State.toolSettings.wandContiguous = false;
+
+            this.performMagicWandWithOpts(center, false, false);
+
+            App.State.toolSettings.wandContiguous = originalContiguous;
         },
 
         clearSelection() {
