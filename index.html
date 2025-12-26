@@ -3315,16 +3315,36 @@ const App = {
             }
 
             if(!w || !h || !project) return;
+
+            const oldW = project.width;
+            const oldH = project.height;
+            const scaleX = w / oldW;
+            const scaleY = h / oldH;
+
             project.width = w; project.height = h;
             
             project.layers.forEach(layer => {
-                const t1 = document.createElement('canvas'); t1.width = w; t1.height = h;
-                t1.getContext('2d').drawImage(layer.canvas, 0, 0, w, h);
-                layer.canvas = t1;
-                
-                const t2 = document.createElement('canvas'); t2.width = w; t2.height = h;
-                t2.getContext('2d').drawImage(layer.originalCanvas, 0, 0, w, h);
-                layer.originalCanvas = t2;
+                // Update position and display size
+                layer.x *= scaleX;
+                layer.y *= scaleY;
+                layer.width *= scaleX;
+                layer.height *= scaleY;
+
+                // Resample raster content
+                // We assume we want to resample the raster to match the scale factor
+                // to preserve relative resolution (or reduce it).
+                const newCvsW = Math.max(1, Math.round(layer.canvas.width * scaleX));
+                const newCvsH = Math.max(1, Math.round(layer.canvas.height * scaleY));
+
+                const resizeCanvas = (src) => {
+                    const t = document.createElement('canvas');
+                    t.width = newCvsW; t.height = newCvsH;
+                    t.getContext('2d').drawImage(src, 0, 0, newCvsW, newCvsH);
+                    return t;
+                };
+
+                layer.canvas = resizeCanvas(layer.canvas);
+                layer.originalCanvas = resizeCanvas(layer.originalCanvas);
             });
 
             const main = document.getElementById('main-canvas'); main.width = w; main.height = h;
