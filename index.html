@@ -397,6 +397,9 @@
                         <i class="ph ph-clipboard"></i> Paste <span style="margin-left:auto; font-size:10px; color:#666;">Ctrl+V</span>
                     </div>
                     <div style="height:1px; background:var(--border); margin: 4px 0;"></div>
+                    <div class="dropdown-item" onclick="App.Tools.selectAll()">
+                        <i class="ph ph-selection-all"></i> Select All <span style="margin-left:auto; font-size:10px; color:#666;">Ctrl+A</span>
+                    </div>
                     <div class="dropdown-item" onclick="App.Tools.invertSelection()">
                         <i class="ph ph-swap"></i> Invert Selection
                     </div>
@@ -467,11 +470,16 @@
         <div style="height: 1px; background: var(--border); width: 60%;"></div>
 
         <button class="tool-btn" id="tool-paint" title="Paint Brush" data-tool="paint"><i class="ph ph-paint-brush"></i></button>
+        <button class="tool-btn" id="tool-bucket" title="Paint Bucket" data-tool="bucket"><i class="ph ph-paint-bucket"></i></button>
         <button class="tool-btn" id="tool-smudge" title="Smudge Tool" data-tool="smudge"><i class="ph ph-hand-pointing"></i></button>
         <button class="tool-btn" id="tool-eraser" title="Eraser" data-tool="eraser"><i class="ph ph-eraser"></i></button>
         <button class="tool-btn" id="tool-draw-rect" title="Draw Rectangle" data-tool="rect"><i class="ph ph-rectangle"></i></button>
         <button class="tool-btn" id="tool-draw-line" title="Draw Line" data-tool="line"><i class="ph ph-line-segment"></i></button>
         <button class="tool-btn" id="tool-draw-arrow" title="Draw Arrow" data-tool="arrow"><i class="ph ph-arrow-up-right"></i></button>
+
+        <div style="margin-top:auto; padding-bottom:10px; width:100%; display:flex; justify-content:center;">
+            <input type="color" id="global-color" value="#f2b8b5" title="Global Color" style="width:36px; height:36px; padding:2px; border:none; background:transparent; cursor:pointer;">
+        </div>
     </aside>
 
     <!-- CANVAS -->
@@ -502,6 +510,7 @@
             <div id="layers-content" class="sidebar-content">
                 <div class="layer-actions">
                     <button class="btn btn-sm" onclick="App.Layers.addEmptyLayer()" title="New Empty Layer"><i class="ph ph-plus"></i></button>
+                    <button class="btn btn-sm" onclick="App.Layers.duplicateActiveLayer()" title="Duplicate Layer"><i class="ph ph-copy"></i></button>
                     <button class="btn btn-sm" onclick="App.Layers.deleteActiveLayer()" title="Delete Layer"><i class="ph ph-trash"></i></button>
                     <button class="btn btn-sm" onclick="App.Layers.moveLayer(1)" title="Move Up"><i class="ph ph-arrow-up"></i></button>
                     <button class="btn btn-sm" onclick="App.Layers.moveLayer(-1)" title="Move Down"><i class="ph ph-arrow-down"></i></button>
@@ -703,12 +712,25 @@
         <div class="modal">
             <h3>Resize Image</h3>
             <div class="control-group">
-                <label>Width (px)</label>
-                <input type="number" id="resize-w" placeholder="Width">
+                <label>Unit</label>
+                <select id="resize-unit" onchange="App.UI.updateResizeUnit()">
+                    <option value="px">Pixels</option>
+                    <option value="percent">Percent</option>
+                </select>
             </div>
             <div class="control-group">
-                <label>Height (px)</label>
-                <input type="number" id="resize-h" placeholder="Height">
+                <label>Width</label>
+                <input type="number" id="resize-w" placeholder="Width" oninput="App.UI.syncResize('w')">
+            </div>
+            <div class="control-group">
+                <label>Height</label>
+                <input type="number" id="resize-h" placeholder="Height" oninput="App.UI.syncResize('h')">
+            </div>
+            <div class="control-group">
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                    <input type="checkbox" id="resize-constrain" checked style="width:auto;">
+                    Constrain Proportions
+                </label>
             </div>
             <div class="modal-actions">
                 <button class="btn" onclick="App.UI.closeModal('resize-modal')">Cancel</button>
@@ -942,6 +964,50 @@ const App = {
 
         addEmptyLayer() { this.addLayer(null, "New Layer"); },
 
+        duplicateActiveLayer() {
+            const project = App.getActiveProject();
+            if(!project) return;
+            const layer = this.getActive();
+            if(!layer) return;
+
+            const id = this.createId(project);
+
+            // Deep copy canvases
+            const canvas = document.createElement('canvas');
+            canvas.width = layer.canvas.width; canvas.height = layer.canvas.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(layer.canvas, 0, 0);
+
+            const originalCanvas = document.createElement('canvas');
+            originalCanvas.width = layer.originalCanvas.width; originalCanvas.height = layer.originalCanvas.height;
+            const oCtx = originalCanvas.getContext('2d');
+            oCtx.drawImage(layer.originalCanvas, 0, 0);
+
+            const newLayer = {
+                id: id,
+                name: layer.name + " copy",
+                canvas: canvas,
+                originalCanvas: originalCanvas,
+                visible: layer.visible,
+                opacity: layer.opacity,
+                blendMode: layer.blendMode,
+                filters: {...layer.filters},
+                x: layer.x, y: layer.y,
+                width: layer.width, height: layer.height,
+                rotation: layer.rotation,
+                type: layer.type,
+                textProps: layer.textProps ? {...layer.textProps} : null
+            };
+
+            const idx = project.layers.findIndex(l => l.id === project.activeLayerId);
+            project.layers.splice(idx, 0, newLayer); // Insert above
+
+            this.setActive(id);
+            App.Render.update();
+            App.UI.renderLayerList();
+            App.History.push();
+        },
+
         deleteActiveLayer() {
             const project = App.getActiveProject();
             if(!project || project.layers.length <= 1) { alert("Cannot delete the last layer."); return; }
@@ -1084,24 +1150,26 @@ const App = {
             ovCtx.clearRect(0, 0, ovCtx.canvas.width, ovCtx.canvas.height);
             
             if(project.selection.active && project.selection.mask) {
+                // Draw mask overlay (semi-transparent blue)
                 ovCtx.save();
                 ovCtx.globalAlpha = 0.2;
                 ovCtx.fillStyle = '#6366f1';
                 ovCtx.drawImage(project.selection.mask, 0, 0);
                 ovCtx.restore();
 
-                if(project.selection.type !== 'wand') {
-                    if(project.selection.pathFunc) {
-                        ovCtx.beginPath();
-                        project.selection.pathFunc(ovCtx);
-                        ovCtx.strokeStyle = 'white'; ovCtx.lineWidth = 2;
-                        ovCtx.setLineDash([6, 4]);
-                        ovCtx.stroke();
-                        ovCtx.strokeStyle = 'black'; ovCtx.lineWidth = 2;
-                        ovCtx.lineDashOffset = 6;
-                        ovCtx.stroke();
-                        ovCtx.canvas.classList.add('ants');
-                    }
+                // Draw outline (ants)
+                if(project.selection.outlinePath) {
+                    ovCtx.save();
+                    ovCtx.strokeStyle = 'white'; ovCtx.lineWidth = 2;
+                    ovCtx.setLineDash([6, 4]);
+                    ovCtx.stroke(project.selection.outlinePath);
+
+                    ovCtx.strokeStyle = 'black'; ovCtx.lineWidth = 2;
+                    ovCtx.lineDashOffset = 6;
+                    ovCtx.stroke(project.selection.outlinePath);
+                    ovCtx.restore();
+
+                    ovCtx.canvas.classList.add('ants');
                 }
             } else {
                 ovCtx.canvas.classList.remove('ants');
@@ -1181,13 +1249,11 @@ const App = {
         },
 
         renderLayer(layer) {
-            // Apply filters from originalCanvas to canvas
             const ctx = layer.canvas.getContext('2d');
             const f = layer.filters;
 
             ctx.clearRect(0,0, layer.canvas.width, layer.canvas.height);
             
-            // Use temp canvas for filtering
             const tempC = document.createElement('canvas');
             tempC.width = layer.canvas.width; tempC.height = layer.canvas.height;
             const tCtx = tempC.getContext('2d');
@@ -1209,8 +1275,29 @@ const App = {
                 if(f.pixelate > 0) this.applyPixelate(tCtx, tempC.width, tempC.height, f.pixelate);
             }
 
-            // Draw filtered result back to main layer canvas
-            ctx.drawImage(tempC, 0, 0);
+            // If selection active, we must mask the result.
+            // Filter result is in tempC. Original is in layer.originalCanvas.
+            // We want: Selection ? (tempC where Mask) + (Original where !Mask) : tempC.
+
+            const selMask = App.Tools.getSelectionMaskForLayer(layer);
+            if(selMask) {
+                 // 1. Draw Original Unfiltered
+                 ctx.drawImage(layer.originalCanvas, 0, 0);
+
+                 // 2. Draw Filtered (tempC) masked by selMask
+                 const maskedCvs = document.createElement('canvas');
+                 maskedCvs.width = layer.canvas.width; maskedCvs.height = layer.canvas.height;
+                 const mCtx = maskedCvs.getContext('2d');
+
+                 mCtx.drawImage(tempC, 0, 0);
+                 mCtx.globalCompositeOperation = 'destination-in';
+                 mCtx.drawImage(selMask, 0, 0);
+
+                 // 3. Draw Masked Filtered on top
+                 ctx.drawImage(maskedCvs, 0, 0);
+            } else {
+                 ctx.drawImage(tempC, 0, 0);
+            }
 
             App.Render.update();
         },
@@ -1417,8 +1504,11 @@ const App = {
                         document.getElementById('canvas-area').style.cursor = 'grabbing';
                     }
                 }
-                if((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) this.copySelection();
-                if((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) this.pasteSelection();
+                if((e.ctrlKey || e.metaKey)) {
+                    if(e.key === 'c' || e.key === 'C') { e.preventDefault(); this.copySelection(); }
+                    if(e.key === 'v' || e.key === 'V') { e.preventDefault(); this.pasteSelection(); }
+                    if(e.key === 'a' || e.key === 'A') { e.preventDefault(); this.selectAll(); }
+                }
             });
             window.addEventListener('keyup', e => {
                 if(e.code === 'Space') {
@@ -1428,6 +1518,14 @@ const App = {
                     }
                 }
             });
+
+        // Shortcuts
+        window.addEventListener('keydown', e => {
+             if((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+                 e.preventDefault();
+                 App.Tools.clearSelection();
+             }
+        });
 
             area.addEventListener('wheel', e => {
                 const project = App.getActiveProject();
@@ -1584,7 +1682,14 @@ const App = {
             }
             
             if(tool === 'sel-wand') {
-                this.performMagicWand(pos);
+                this.performMagicWandWithOpts(pos, e.shiftKey, e.altKey);
+            }
+
+            if(tool === 'bucket') {
+                this.fillBucket(pos);
+                App.UI.renderLayerList();
+                App.History.push();
+                return;
             }
 
             if(tool === 'paint' || tool === 'eraser' || tool === 'sel-brush' || tool === 'smudge') {
@@ -1667,63 +1772,88 @@ const App = {
                 if (App.State.dragMode === 'resize') {
                     const layer = App.Layers.getActive();
                     const angle = (layer.rotation || 0) * Math.PI / 180;
-
-                    // 1. Calculate Delta in Local Unrotated Space
-                    const gDx = pos.x - App.State.lastMouse.x;
-                    const gDy = pos.y - App.State.lastMouse.y;
-
-                    const dx = gDx * Math.cos(-angle) - gDy * Math.sin(-angle);
-                    const dy = gDx * Math.sin(-angle) + gDy * Math.cos(-angle);
-
                     const handle = App.State.activeHandle;
 
-                    // 2. Identify Anchor Ratios (0..1)
-                    // If handle is 'br', anchor is 'tl' (0,0).
-                    let ax = 0.5, ay = 0.5; // anchor relative to top-left (0..1)
-                    let dW = 0, dH = 0;
+                    // Unit Vectors
+                    const ux = { x: Math.cos(angle), y: Math.sin(angle) };
+                    const uy = { x: -Math.sin(angle), y: Math.cos(angle) };
 
-                    if (handle.includes('l')) { ax = 1; dW = -dx; }
-                    else if (handle.includes('r')) { ax = 0; dW = dx; }
+                    // Current Center
+                    const cx = layer.x + layer.width/2;
+                    const cy = layer.y + layer.height/2;
 
-                    if (handle.includes('t')) { ay = 1; dH = -dy; }
-                    else if (handle.includes('b')) { ay = 0; dH = dy; }
+                    // Determine Pivot (Fixed Point) based on handle
+                    // Handle Directions (from center):
+                    // tl: -1, -1; tr: 1, -1; bl: -1, 1; br: 1, 1
+                    let hx = 0, hy = 0;
+                    if (handle.includes('l')) hx = -1; else if (handle.includes('r')) hx = 1;
+                    if (handle.includes('t')) hy = -1; else if (handle.includes('b')) hy = 1;
 
-                    // 3. Capture Current Global Anchor Position
-                    // Local coords of anchor relative to center
-                    const oldCx = layer.x + layer.width/2;
-                    const oldCy = layer.y + layer.height/2;
-                    const anchorLx = (ax - 0.5) * layer.width;
-                    const anchorLy = (ay - 0.5) * layer.height;
+                    // Pivot is opposite to handle
+                    const px = cx + (ux.x * (-hx * layer.width/2) + uy.x * (-hy * layer.height/2));
+                    const py = cy + (ux.y * (-hx * layer.width/2) + uy.y * (-hy * layer.height/2));
 
-                    // Global Anchor
-                    const anchorGx = oldCx + (anchorLx * Math.cos(angle) - anchorLy * Math.sin(angle));
-                    const anchorGy = oldCy + (anchorLx * Math.sin(angle) + anchorLy * Math.cos(angle));
+                    // Vector from Pivot to Mouse
+                    const vpx = pos.x - px;
+                    const vpy = pos.y - py;
 
-                    // 4. Update Dimensions
-                    const minSize = 5;
-                    let newW = Math.max(minSize, layer.width + dW);
-                    let newH = Math.max(minSize, layer.height + dH);
+                    // Project onto local axes
+                    // Dot product
+                    let projX = vpx * ux.x + vpy * ux.y;
+                    let projY = vpx * uy.x + vpy * uy.y;
 
-                    // 5. Calculate New Center from Anchor
-                    // New Local Anchor offset
-                    const newAnchorLx = (ax - 0.5) * newW;
-                    const newAnchorLy = (ay - 0.5) * newH;
+                    // New Width/Height based on projection
+                    // If handle is Left (-1), we are moving away from Pivot (Right).
+                    // projX should be negative?
+                    // Actually, Pivot is Right. Mouse is Left. Vector Pivot->Mouse is negative.
+                    // We want Length.
+                    // But we must respect the side we are dragging.
+                    // If we cross the pivot, we flip? For now clamp min size.
 
-                    // Rotated New Local Anchor
-                    const rNewAnchorLx = newAnchorLx * Math.cos(angle) - newAnchorLy * Math.sin(angle);
-                    const rNewAnchorLy = newAnchorLx * Math.sin(angle) + newAnchorLy * Math.cos(angle);
+                    // We need 'signed' length relative to the expected direction (hx, hy).
+                    // Expected direction from Pivot to Handle is (hx, hy) * size.
 
-                    // New Center = GlobalAnchor - RotatedNewLocalAnchor
-                    const newCx = anchorGx - rNewAnchorLx;
-                    const newCy = anchorGy - rNewAnchorLy;
+                    // If we just take abs(proj), we assume we stay on the same side.
+                    let newW = layer.width;
+                    let newH = layer.height;
 
-                    // 6. Update Layer
+                    if (hx !== 0) newW = Math.abs(projX);
+                    if (hy !== 0) newH = Math.abs(projY);
+
+                    // Aspect Ratio Lock
+                    if (e.shiftKey) {
+                        const ratio = layer.width / layer.height;
+                        if (hx !== 0 && hy !== 0) { // Corner
+                            // Use the larger projection change? Or just X drives Y?
+                            // Standard: Project mouse onto diagonal?
+                            // Simpler: Take max relative change.
+                            if (newW / ratio > newH) newH = newW / ratio;
+                            else newW = newH * ratio;
+                        } else if (hx !== 0) { // Side X
+                            newH = newW / ratio;
+                        } else if (hy !== 0) { // Side Y
+                            newW = newH * ratio;
+                        }
+                    }
+
+                    newW = Math.max(5, newW);
+                    newH = Math.max(5, newH);
+
+                    // Recalculate Center
+                    // Center = Pivot + (Half Size * Direction From Pivot)
+                    // Direction From Pivot to Center is (hx, hy). (Since Pivot is -hx, -hy)
+                    // Wait, if Handle is Left (-1), Pivot is Right.
+                    // Center is Left of Pivot. So direction is -1. Correct.
+
+                    const newCx = px + (ux.x * (hx * newW/2) + uy.x * (hy * newH/2));
+                    const newCy = py + (ux.y * (hx * newW/2) + uy.y * (hy * newH/2));
+
                     layer.width = newW;
                     layer.height = newH;
                     layer.x = newCx - newW/2;
                     layer.y = newCy - newH/2;
 
-                    App.State.lastMouse = pos;
+                    App.State.lastMouse = pos; // Not really needed for absolute calc but keeps state clean
                     App.Render.update();
                     return;
                 }
@@ -1776,15 +1906,16 @@ const App = {
                             const x = localLast.x + (localPos.x - localLast.x) * t;
                             const y = localLast.y + (localPos.y - localLast.y) * t;
                             if(tool === 'smudge') {
-                                // Smudge needs careful logic
+                                this.paintSmudge({x: localLast.x + (localPos.x - localLast.x) * (t-1/steps), y: localLast.y + (localPos.y - localLast.y) * (t-1/steps)}, {x, y});
                             }
                             else if (tool === 'clone') this.paintClone({x, y});
                             else if (tool === 'sel-brush') this.paintSelectionBrush({x, y}, e.altKey);
                             else this.paintBrush({x, y});
                         }
                     }
-                    // if(tool === 'smudge') this.paintSmudge(last, pos);
-                    if (tool === 'clone') this.paintClone(localPos);
+
+                    if(tool === 'smudge') this.paintSmudge(localLast, localPos);
+                    else if (tool === 'clone') this.paintClone(localPos);
                     else if (tool === 'sel-brush') this.paintSelectionBrush(localPos, e.altKey);
                     else this.paintBrush(localPos);
 
@@ -1836,9 +1967,17 @@ const App = {
                         App.History.push();
                     }
                 }
-                else if(tool === 'sel-rect') this.createSelectionMask('rect', App.State.drawStart, pos);
-                else if(tool === 'sel-oval') this.createSelectionMask('oval', App.State.drawStart, pos);
-                else if(tool === 'sel-lasso') this.createSelectionMask('lasso', null, null, project.selection.tempPath);
+                else if(tool === 'bucket') {
+                    const layer = App.Layers.getActive();
+                    if(layer) {
+                        this.fillBucket(pos);
+                        App.UI.renderLayerList();
+                        App.History.push();
+                    }
+                }
+                else if(tool === 'sel-rect') this.createSelectionMask('rect', App.State.drawStart, pos, null, e.shiftKey, e.altKey);
+                else if(tool === 'sel-oval') this.createSelectionMask('oval', App.State.drawStart, pos, null, e.shiftKey, e.altKey);
+                else if(tool === 'sel-lasso') this.createSelectionMask('lasso', null, null, project.selection.tempPath, e.shiftKey, e.altKey);
                 else if (['paint','eraser','clone','smudge'].includes(tool)) {
                     const layer = App.Layers.getActive();
                     if(layer) App.Filters.renderLayer(layer);
@@ -1851,16 +1990,70 @@ const App = {
             }
         },
 
+        generateSelectionOutline(selection) {
+            if(!selection.mask) return;
+            const w = selection.mask.width;
+            const h = selection.mask.height;
+            const ctx = selection.mask.getContext('2d');
+            const imgData = ctx.getImageData(0, 0, w, h);
+            const data = imgData.data;
+
+            const path = new Path2D();
+            this.marchingSquares(path, data, w, h);
+            selection.outlinePath = path;
+            selection.pathFunc = null; // Deprecated
+        },
+
+        marchingSquares(path, data, width, height) {
+            const getState = (x, y) => {
+                if(x < 0 || x >= width || y < 0 || y >= height) return 0;
+                return data[(y * width + x) * 4 + 3] > 127 ? 1 : 0;
+            };
+
+            // Use Stride 1 for accuracy on small details
+            for (let y = 0; y < height - 1; y++) {
+                for (let x = 0; x < width - 1; x++) {
+                    const tl = getState(x, y);
+                    const tr = getState(x + 1, y);
+                    const br = getState(x + 1, y + 1);
+                    const bl = getState(x, y + 1);
+
+                    const index = (tl << 3) | (tr << 2) | (br << 1) | bl;
+                    if (index === 0 || index === 15) continue;
+
+                    const a = {x: x + 0.5, y: y};       // Top
+                    const b = {x: x + 1,   y: y + 0.5}; // Right
+                    const c = {x: x + 0.5, y: y + 1};   // Bottom
+                    const d = {x: x,       y: y + 0.5}; // Left
+
+                    switch(index) {
+                        case 1: path.moveTo(d.x, d.y); path.lineTo(c.x, c.y); break;
+                        case 2: path.moveTo(b.x, b.y); path.lineTo(c.x, c.y); break;
+                        case 3: path.moveTo(d.x, d.y); path.lineTo(b.x, b.y); break;
+                        case 4: path.moveTo(a.x, a.y); path.lineTo(b.x, b.y); break;
+                        case 5: path.moveTo(a.x, a.y); path.lineTo(d.x, d.y); path.moveTo(b.x, b.y); path.lineTo(c.x, c.y); break;
+                        case 6: path.moveTo(a.x, a.y); path.lineTo(c.x, c.y); break;
+                        case 7: path.moveTo(a.x, a.y); path.lineTo(d.x, d.y); break;
+                        case 8: path.moveTo(a.x, a.y); path.lineTo(d.x, d.y); break;
+                        case 9: path.moveTo(a.x, a.y); path.lineTo(c.x, c.y); break;
+                        case 10: path.moveTo(a.x, a.y); path.lineTo(b.x, b.y); path.moveTo(c.x, c.y); path.lineTo(d.x, d.y); break;
+                        case 11: path.moveTo(a.x, a.y); path.lineTo(b.x, b.y); break;
+                        case 12: path.moveTo(d.x, d.y); path.lineTo(b.x, b.y); break;
+                        case 13: path.moveTo(b.x, b.y); path.lineTo(c.x, c.y); break;
+                        case 14: path.moveTo(d.x, d.y); path.lineTo(c.x, c.y); break;
+                    }
+                }
+            }
+        },
+
         performMagicWand(pos) {
-            const layer = App.Layers.getActive();
-            const project = App.getActiveProject();
-            if(!layer || !project) return;
+            // Redirect to logic with opts (defaults) - this legacy call might not pass modifiers
+            // But handleDown calls performMagicWandWithOpts directly.
+            this.performMagicWandWithOpts(pos, false, false);
+        },
 
-            const local = this.toLocal(pos, layer);
-            const lx = Math.floor(local.x);
-            const ly = Math.floor(local.y);
-
-            if(lx < 0 || lx >= layer.canvas.width || ly < 0 || ly >= layer.canvas.height) return;
+        computeColorMask(layer, lx, ly, tolerance, contiguous) {
+            if(lx < 0 || lx >= layer.canvas.width || ly < 0 || ly >= layer.canvas.height) return null;
 
             const ctx = layer.canvas.getContext('2d');
             const w = layer.canvas.width;
@@ -1871,69 +2064,274 @@ const App = {
             const startIdx = (ly * w + lx) * 4;
             const sr = data[startIdx], sg = data[startIdx+1], sb = data[startIdx+2], sa = data[startIdx+3];
 
-            const tolerance = project.selection.wandTolerance || 30;
-            const visited = new Uint8Array(w * h);
-            const stack = [lx, ly];
-
             const maskCvs = document.createElement('canvas');
             maskCvs.width = w; maskCvs.height = h;
             const mCtx = maskCvs.getContext('2d');
             const mImgData = mCtx.createImageData(w, h);
             const mData = mImgData.data;
 
-            visited[ly * w + lx] = 1;
-
+            // Improved matching using Euclidean distance
             const match = (idx) => {
                 const r = data[idx], g = data[idx+1], b = data[idx+2], a = data[idx+3];
-                return Math.abs(r-sr)<=tolerance && Math.abs(g-sg)<=tolerance && Math.abs(b-sb)<=tolerance && Math.abs(a-sa)<=tolerance;
+                const dist = Math.sqrt(Math.pow(r-sr,2) + Math.pow(g-sg,2) + Math.pow(b-sb,2) + Math.pow(a-sa,2));
+                return dist <= tolerance;
             };
 
-            while(stack.length) {
-                const y = stack.pop();
-                const x = stack.pop();
+            if (contiguous) {
+                const visited = new Uint8Array(w * h);
+                const stack = [lx, ly];
+                visited[ly * w + lx] = 1;
 
-                const idx = y * w + x;
-                const mIdx = idx * 4;
-                mData[mIdx] = 255; mData[mIdx+1] = 255; mData[mIdx+2] = 255; mData[mIdx+3] = 255;
+                while(stack.length) {
+                    const y = stack.pop();
+                    const x = stack.pop();
 
-                const neighbors = [
-                    {dx: 0, dy: -1}, {dx: 0, dy: 1}, {dx: -1, dy: 0}, {dx: 1, dy: 0}
-                ];
+                    const idx = y * w + x;
+                    const mIdx = idx * 4;
+                    mData[mIdx] = 255; mData[mIdx+1] = 255; mData[mIdx+2] = 255; mData[mIdx+3] = 255;
 
-                for(let n of neighbors) {
-                    const nx = x + n.dx; const ny = y + n.dy;
-                    if(nx >= 0 && nx < w && ny >= 0 && ny < h) {
-                        const nIdx = ny * w + nx;
-                        if(visited[nIdx] === 0) {
-                            if(match(nIdx * 4)) {
-                                visited[nIdx] = 1;
-                                stack.push(nx, ny);
+                    const neighbors = [
+                        {dx: 0, dy: -1}, {dx: 0, dy: 1}, {dx: -1, dy: 0}, {dx: 1, dy: 0}
+                    ];
+
+                    for(let n of neighbors) {
+                        const nx = x + n.dx; const ny = y + n.dy;
+                        if(nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                            const nIdx = ny * w + nx;
+                            if(visited[nIdx] === 0) {
+                                if(match(nIdx * 4)) {
+                                    visited[nIdx] = 1;
+                                    stack.push(nx, ny);
+                                }
                             }
                         }
+                    }
+                }
+            } else {
+                // Select Similar (Global Scan)
+                for (let i = 0; i < w * h; i++) {
+                    if (match(i * 4)) {
+                        const mIdx = i * 4;
+                        mData[mIdx] = 255; mData[mIdx+1] = 255; mData[mIdx+2] = 255; mData[mIdx+3] = 255;
                     }
                 }
             }
 
             mCtx.putImageData(mImgData, 0, 0);
+            return maskCvs;
+        },
 
-            // Project to Global Selection Mask
-            const finalMask = document.createElement('canvas');
-            finalMask.width = project.width; finalMask.height = project.height;
-            const fCtx = finalMask.getContext('2d');
+        performMagicWandWithOpts(pos, isAdd, isSubtract) {
+            const layer = App.Layers.getActive();
+            const project = App.getActiveProject();
+            if(!layer || !project) return;
+
+            const local = this.toLocal(pos, layer);
+            const lx = Math.floor(local.x);
+            const ly = Math.floor(local.y);
+
+            // Click to Deselect check (if clicking outside or null return)
+            if(lx < 0 || lx >= layer.canvas.width || ly < 0 || ly >= layer.canvas.height) {
+                if(!isAdd && !isSubtract) this.clearSelection();
+                return;
+            }
+
+            const tolerance = project.selection.wandTolerance || 40; // Default to 40
+            const contiguous = App.State.toolSettings.wandContiguous !== false;
+
+            const maskCvs = this.computeColorMask(layer, lx, ly, tolerance, contiguous);
+            if(!maskCvs) return;
+
+            // Project new selection part to Global Selection Mask
+            const partMask = document.createElement('canvas');
+            partMask.width = project.width; partMask.height = project.height;
+            const fCtx = partMask.getContext('2d');
 
             const cx = layer.x + layer.width/2;
             const cy = layer.y + layer.height/2;
+
+            fCtx.save();
             fCtx.translate(cx, cy);
             fCtx.rotate((layer.rotation || 0) * Math.PI / 180);
 
             fCtx.drawImage(maskCvs, -layer.width/2, -layer.height/2, layer.width, layer.height);
+            fCtx.restore();
 
-            project.selection = { active: true, mask: finalMask, type: 'wand' };
+            // Combine with existing selection
+            if(project.selection.active && project.selection.mask && (isAdd || isSubtract)) {
+                const globalCtx = project.selection.mask.getContext('2d');
+                globalCtx.globalCompositeOperation = isSubtract ? 'destination-out' : 'source-over';
+                globalCtx.drawImage(partMask, 0, 0);
+                // Keep type as wand but maybe mixed.
+                project.selection.type = 'wand';
+            } else {
+                project.selection = { active: true, mask: partMask, type: 'wand', wandTolerance: tolerance };
+            }
+
+            // Generate Outline
+            this.generateSelectionOutline(project.selection);
+
             App.Render.update();
+        },
+
+        clearSelection() {
+            const project = App.getActiveProject();
+            if(project) {
+                project.selection = { active: false, mask: null, type: null, wandTolerance: project.selection.wandTolerance };
+                App.Render.update();
+            }
+        },
+
+        invertSelection() {
+            const project = App.getActiveProject();
+            if(!project || !project.selection.active || !project.selection.mask) {
+                // If no selection, select all?
+                // Usually Invert on nothing means Select All.
+                this.selectAll();
+                return;
+            }
+
+            const mask = project.selection.mask;
+            const w = mask.width;
+            const h = mask.height;
+
+            const newMask = document.createElement('canvas');
+            newMask.width = w; newMask.height = h;
+            const ctx = newMask.getContext('2d');
+
+            // Fill white (Select All)
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, w, h);
+
+            // Cut out existing selection
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.drawImage(mask, 0, 0);
+
+            // Update selection
+            // We lose the pathFunc if it was vector. We revert to raster mask behavior.
+            project.selection.mask = newMask;
+            project.selection.type = 'inverted';
+            project.selection.pathFunc = null; // Deprecated
+
+            // We should generate an outline for the inverted selection too
+            this.generateSelectionOutline(project.selection);
+
+            App.Render.update();
+        },
+
+        selectAll() {
+            const project = App.getActiveProject();
+            if(!project) return;
+            const mask = document.createElement('canvas');
+            mask.width = project.width; mask.height = project.height;
+            const ctx = mask.getContext('2d');
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, mask.width, mask.height);
+
+            const p = new Path2D();
+            p.rect(0, 0, mask.width, mask.height);
+
+            project.selection = {
+                active: true,
+                mask: mask,
+                type: 'all',
+                outlinePath: p,
+                wandTolerance: project.selection.wandTolerance || 40
+            };
+            App.Render.update();
+        },
+
+        getSelectionMaskForLayer(layer) {
+            const project = App.getActiveProject();
+            if(!project.selection.active || !project.selection.mask) return null;
+
+            const mask = document.createElement('canvas');
+            mask.width = layer.canvas.width; // Local raster size
+            mask.height = layer.canvas.height;
+            const ctx = mask.getContext('2d');
+
+            // Transform: We want to draw the Global Mask into the Local Space.
+            // Local Space is unrotated, scaled to raster.
+
+            const cx = layer.x + layer.width/2;
+            const cy = layer.y + layer.height/2;
+            const angle = (layer.rotation || 0) * Math.PI / 180;
+
+            ctx.save();
+            // 1. Move origin to center of local space
+            ctx.translate(layer.canvas.width/2, layer.canvas.height/2);
+            // 2. Scale from Display Size to Raster Size (if different)
+            ctx.scale(layer.canvas.width / layer.width, layer.canvas.height / layer.height);
+            // 3. Reverse Rotation
+            ctx.rotate(-angle);
+            // 4. Translate back relative to Global Center
+            ctx.translate(-cx, -cy);
+
+            // Draw Global Mask
+            ctx.drawImage(project.selection.mask, 0, 0);
+            ctx.restore();
+
+            return mask;
         },
 
         // Helper: Convert global mask coords to selection? No, selection is global.
         // Painting selection is global.
+        paintSmudge(fromPos, toPos) {
+            const layer = App.Layers.getActive();
+            if(!layer) return;
+            const ctx = layer.canvas.getContext('2d');
+            const oCtx = layer.originalCanvas.getContext('2d');
+            const settings = App.State.toolSettings;
+            const size = settings.brushSize;
+            const rad = size / 2;
+
+            const brush = document.createElement('canvas');
+            brush.width = size; brush.height = size;
+            const bCtx = brush.getContext('2d');
+
+            const r0 = Math.min(rad * (settings.brushHardness/100), rad - 0.1);
+            const gradient = bCtx.createRadialGradient(rad, rad, r0, rad, rad, rad);
+            gradient.addColorStop(0, 'rgba(255,255,255,1)');
+            gradient.addColorStop(1, 'rgba(255,255,255,0)');
+            bCtx.fillStyle = gradient;
+            bCtx.fillRect(0, 0, size, size);
+
+            const srcCvs = document.createElement('canvas');
+            srcCvs.width = size; srcCvs.height = size;
+            const sCtx = srcCvs.getContext('2d');
+            sCtx.drawImage(layer.canvas, fromPos.x - rad, fromPos.y - rad, size, size, 0, 0, size, size);
+
+            sCtx.globalCompositeOperation = 'destination-in';
+            sCtx.drawImage(brush, 0, 0);
+
+            const opacity = settings.brushOpacity / 100;
+            const selMask = this.getSelectionMaskForLayer(layer);
+
+            const drawTo = (targetCtx) => {
+                targetCtx.save();
+                targetCtx.globalAlpha = opacity;
+                if (selMask) {
+                     const maskedSmudge = document.createElement('canvas');
+                     maskedSmudge.width = layer.canvas.width; maskedSmudge.height = layer.canvas.height;
+                     const mCtx = maskedSmudge.getContext('2d');
+
+                     mCtx.drawImage(srcCvs, toPos.x - rad, toPos.y - rad);
+                     mCtx.globalCompositeOperation = 'destination-in';
+                     mCtx.drawImage(selMask, 0, 0);
+
+                     targetCtx.drawImage(maskedSmudge, 0, 0);
+                } else {
+                    targetCtx.drawImage(srcCvs, toPos.x - rad, toPos.y - rad);
+                }
+                targetCtx.restore();
+            };
+
+            drawTo(ctx);
+            drawTo(oCtx);
+
+            App.Render.update();
+        },
+
         paintSelectionBrush(pos, isSubtract) {
             const project = App.getActiveProject();
             if (!project.selection.active || !project.selection.mask) {
@@ -1992,7 +2390,9 @@ const App = {
             const g = parseInt(color.slice(3, 5), 16);
             const b = parseInt(color.slice(5, 7), 16);
             
-            const gradient = bCtx.createRadialGradient(rad, rad, rad * (settings.brushHardness/100), rad, rad, rad);
+            // Ensure inner radius < outer radius to avoid invisible gradient at 100% hardness
+            const r0 = Math.min(rad * (settings.brushHardness/100), rad - 0.1);
+            const gradient = bCtx.createRadialGradient(rad, rad, r0, rad, rad, rad);
             gradient.addColorStop(0, `rgba(${r},${g},${b},1)`);
             gradient.addColorStop(1, `rgba(${r},${g},${b},0)`);
             
@@ -2002,16 +2402,37 @@ const App = {
             ctx.save();
             if(isEraser) ctx.globalCompositeOperation = 'destination-out';
             ctx.globalAlpha = settings.brushOpacity / 100;
-            ctx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
+
+            const selMask = this.getSelectionMaskForLayer(layer);
+
+            if(selMask) {
+                 // Optimization: reuse a shared temp canvas if possible, but creates are ok for now.
+                 const strokeCvs = document.createElement('canvas');
+                 strokeCvs.width = layer.canvas.width; strokeCvs.height = layer.canvas.height;
+                 const sCtx = strokeCvs.getContext('2d');
+
+                 sCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
+                 sCtx.globalCompositeOperation = 'destination-in';
+                 sCtx.drawImage(selMask, 0, 0);
+
+                 ctx.drawImage(strokeCvs, 0, 0);
+
+                 oCtx.save();
+                 if(isEraser) oCtx.globalCompositeOperation = 'destination-out';
+                 oCtx.globalAlpha = settings.brushOpacity / 100;
+                 oCtx.drawImage(strokeCvs, 0, 0);
+                 oCtx.restore();
+            } else {
+                 ctx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
+
+                 oCtx.save();
+                 if(isEraser) oCtx.globalCompositeOperation = 'destination-out';
+                 oCtx.globalAlpha = settings.brushOpacity / 100;
+                 oCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
+                 oCtx.restore();
+            }
+
             ctx.restore();
-
-            // Mirror
-            oCtx.save();
-            if(isEraser) oCtx.globalCompositeOperation = 'destination-out';
-            oCtx.globalAlpha = settings.brushOpacity / 100;
-            oCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
-            oCtx.restore();
-
             App.Render.update();
         },
 
@@ -2065,30 +2486,12 @@ const App = {
             const size = settings.brushSize;
             const rad = size / 2;
 
-            // Calculate source position in global space
-            // destPos passed here is local to layer (scaled).
-            // We need to un-local it to get global?
-            // Wait, in handleMove:
-            // if (tool === 'clone') this.paintClone(localPos);
-            // So destPos is local to DEST layer.
-
-            // But cloneOffset = pos (Global) - cloneSource (Global).
-            // So we need Global Dest to get Global Source.
-            // Global Dest = (destPos * layer.width / layer.canvas.width) + layer.x ??
-
-            // This is getting complicated with scaling.
-            // Let's simplify: Clone source is captured globally.
-            // But painting is done locally on the layer canvas.
-
-            // If we assume layers are 1:1 for now or close enough.
-            // Or better: Re-calculate global dest from local destPos.
             const destGlobalX = (destPos.x / layer.canvas.width) * layer.width + layer.x;
             const destGlobalY = (destPos.y / layer.canvas.height) * layer.height + layer.y;
 
             const srcGlobalX = destGlobalX - App.State.cloneOffset.x;
             const srcGlobalY = destGlobalY - App.State.cloneOffset.y;
 
-            // Map Global Source to Source Layer Local
             const srcLocalX = (srcGlobalX - sourceLayer.x) * (sourceLayer.canvas.width / sourceLayer.width);
             const srcLocalY = (srcGlobalY - sourceLayer.y) * (sourceLayer.canvas.height / sourceLayer.height);
 
@@ -2096,22 +2499,34 @@ const App = {
             brushCvs.width = size; brushCvs.height = size;
             const bCtx = brushCvs.getContext('2d');
 
-            // Draw from source layer
             bCtx.drawImage(sourceLayer.canvas, srcLocalX - rad, srcLocalY - rad, size, size, 0, 0, size, size);
 
-            // Apply hardness (gradient mask)
             bCtx.globalCompositeOperation = 'destination-in';
-            const gradient = bCtx.createRadialGradient(rad, rad, rad * (settings.brushHardness/100), rad, rad, rad);
+            const r0 = Math.min(rad * (settings.brushHardness/100), rad - 0.1);
+            const gradient = bCtx.createRadialGradient(rad, rad, r0, rad, rad, rad);
             gradient.addColorStop(0, 'rgba(0,0,0,1)');
             gradient.addColorStop(1, 'rgba(0,0,0,0)');
             bCtx.fillStyle = gradient;
             bCtx.fillRect(0, 0, size, size);
 
-            // Draw to dest
+            const selMask = this.getSelectionMaskForLayer(layer);
+
             const drawTo = (targetCtx) => {
                 targetCtx.save();
                 targetCtx.globalAlpha = settings.brushOpacity / 100;
-                targetCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
+
+                if(selMask) {
+                     const sCvs = document.createElement('canvas');
+                     sCvs.width = layer.canvas.width; sCvs.height = layer.canvas.height;
+                     const sCtx = sCvs.getContext('2d');
+                     sCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
+                     sCtx.globalCompositeOperation = 'destination-in';
+                     sCtx.drawImage(selMask, 0, 0);
+                     targetCtx.drawImage(sCvs, 0, 0);
+                } else {
+                    targetCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
+                }
+
                 targetCtx.restore();
             };
 
@@ -2165,40 +2580,172 @@ const App = {
             ctx.strokeStyle = 'black'; ctx.lineWidth = 2; ctx.lineDashOffset = 6; ctx.stroke();
             ctx.setLineDash([]);
         },
-        createSelectionMask(type, start, end, path) {
+        createSelectionMask(type, start, end, path, isAdd, isSubtract) {
             const project = App.getActiveProject();
+
+            // Check for empty selection attempt (Click to Deselect)
+            if (!isAdd && !isSubtract) {
+                let isEmpty = false;
+                if (type === 'rect' || type === 'oval') {
+                     if (Math.abs(end.x - start.x) < 2 && Math.abs(end.y - start.y) < 2) isEmpty = true;
+                } else if (type === 'lasso') {
+                     if (!path || path.length < 3) isEmpty = true;
+                }
+
+                if (isEmpty) {
+                    this.clearSelection();
+                    return;
+                }
+            }
+
             const mask = document.createElement('canvas');
             mask.width = project.width; mask.height = project.height;
             const ctx = mask.getContext('2d');
             ctx.fillStyle = 'white'; ctx.beginPath();
-            let pathFunc = null;
+
+            let outlinePath = new Path2D();
+
             if(type === 'rect') {
                 ctx.rect(start.x, start.y, end.x - start.x, end.y - start.y);
-                pathFunc = (c) => c.rect(start.x, start.y, end.x - start.x, end.y - start.y);
+                outlinePath.rect(start.x, start.y, end.x - start.x, end.y - start.y);
             } else if (type === 'oval') {
                 const rx = Math.abs(end.x - start.x)/2;
                 const ry = Math.abs(end.y - start.y)/2;
                 const cx = Math.min(start.x, end.x) + rx;
                 const cy = Math.min(start.y, end.y) + ry;
                 ctx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
-                pathFunc = (c) => c.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
+                outlinePath.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
             } else if (type === 'lasso') {
                 if(path.length < 3) return;
                 ctx.moveTo(path[0].x, path[0].y);
                 for(let i=1; i<path.length; i++) ctx.lineTo(path[i].x, path[i].y);
                 ctx.closePath();
-                pathFunc = (c) => { c.moveTo(path[0].x, path[0].y); for(let i=1; i<path.length; i++) c.lineTo(path[i].x, path[i].y); c.closePath(); }
+
+                outlinePath.moveTo(path[0].x, path[0].y);
+                for(let i=1; i<path.length; i++) outlinePath.lineTo(path[i].x, path[i].y);
+                outlinePath.closePath();
             }
             ctx.fill();
-            project.selection = { active: true, mask: mask, type: type, pathFunc: pathFunc };
+
+            if(project.selection.active && project.selection.mask && (isAdd || isSubtract)) {
+                const globalCtx = project.selection.mask.getContext('2d');
+                globalCtx.globalCompositeOperation = isSubtract ? 'destination-out' : 'source-over';
+                globalCtx.drawImage(mask, 0, 0);
+
+                // Re-generate outline
+                this.generateSelectionOutline(project.selection);
+            } else {
+                project.selection = { active: true, mask: mask, type: type, outlinePath: outlinePath, wandTolerance: project.selection.wandTolerance || 40 };
+            }
+
+            App.Render.update();
+        },
+
+        fillBucket(pos) {
+            const layer = App.Layers.getActive();
+            const project = App.getActiveProject();
+            if(!layer || !project) return;
+
+            const local = this.toLocal(pos, layer);
+            const lx = Math.floor(local.x);
+            const ly = Math.floor(local.y);
+
+            if(lx < 0 || lx >= layer.canvas.width || ly < 0 || ly >= layer.canvas.height) return;
+
+            const tolerance = project.selection.wandTolerance || 30;
+            const contiguous = App.State.toolSettings.wandContiguous !== false;
+
+            // 1. Compute mask of the area to fill
+            const maskCvs = this.computeColorMask(layer, lx, ly, tolerance, contiguous);
+            if(!maskCvs) return;
+
+            // Dilate mask to cover anti-aliased edges (Robust 8-way dilation)
+            const mCtx = maskCvs.getContext('2d');
+
+            const performDilation = () => {
+                const temp = document.createElement('canvas');
+                temp.width = maskCvs.width; temp.height = maskCvs.height;
+                temp.getContext('2d').drawImage(maskCvs, 0, 0);
+
+                const offsets = [
+                    [1,0], [-1,0], [0,1], [0,-1],
+                    [1,1], [1,-1], [-1,1], [-1,-1]
+                ];
+                offsets.forEach(o => mCtx.drawImage(temp, o[0], o[1]));
+            };
+
+            performDilation();
+            performDilation(); // Second pass to close small holes
+
+            // 2. Prepare Fill Pattern/Color
+            const settings = App.State.toolSettings;
+            const color = settings.drawColor;
+            const opacity = settings.brushOpacity / 100;
+
+            const fillCvs = document.createElement('canvas');
+            fillCvs.width = layer.canvas.width; fillCvs.height = layer.canvas.height;
+            const fCtx = fillCvs.getContext('2d');
+
+            fCtx.fillStyle = color;
+            fCtx.fillRect(0, 0, fillCvs.width, fillCvs.height);
+
+            // 3. Mask the Fill Color with the Flood Fill Mask
+            fCtx.globalCompositeOperation = 'destination-in';
+            fCtx.drawImage(maskCvs, 0, 0);
+
+            // 4. Intersect with Active Selection (if any)
+            const selMask = this.getSelectionMaskForLayer(layer);
+            if(selMask) {
+                fCtx.drawImage(selMask, 0, 0); // destination-in (already set)
+            }
+
+            // 5. Composite onto Layer
+            const applyTo = (ctx) => {
+                ctx.save();
+                ctx.globalAlpha = opacity;
+                // ctx.globalCompositeOperation = 'source-over'; // Standard
+                ctx.drawImage(fillCvs, 0, 0);
+                ctx.restore();
+            };
+
+            applyTo(layer.canvas.getContext('2d'));
+            applyTo(layer.originalCanvas.getContext('2d'));
+
             App.Render.update();
         },
 
         applyDrawToLayer(layer, drawFn) {
             const ctx = layer.canvas.getContext('2d');
             const oCtx = layer.originalCanvas.getContext('2d');
-            // Assuming 1:1 mapping for simplicity in this function
-            drawFn(ctx); drawFn(oCtx);
+
+            const selMask = this.getSelectionMaskForLayer(layer);
+
+            if (selMask) {
+                // Draw shape to temp canvas
+                const temp = document.createElement('canvas');
+                temp.width = layer.canvas.width;
+                temp.height = layer.canvas.height;
+                const tCtx = temp.getContext('2d');
+
+                drawFn(tCtx); // Draw shape on transparent temp
+
+                // Mask it
+                tCtx.globalCompositeOperation = 'destination-in';
+                tCtx.drawImage(selMask, 0, 0);
+
+                // Draw to layer
+                ctx.save();
+                ctx.drawImage(temp, 0, 0);
+                ctx.restore();
+
+                oCtx.save();
+                oCtx.drawImage(temp, 0, 0);
+                oCtx.restore();
+            } else {
+                // No selection, draw directly
+                drawFn(ctx);
+                drawFn(oCtx);
+            }
         }
     },
 
@@ -2212,6 +2759,13 @@ const App = {
             document.querySelectorAll('.tool-btn[data-tool]').forEach(b => {
                 b.addEventListener('click', () => this.selectTool(b.dataset.tool));
             });
+
+            const globalColor = document.getElementById('global-color');
+            if(globalColor) {
+                globalColor.addEventListener('input', e => App.State.toolSettings.drawColor = e.target.value);
+                // Initialize state
+                App.State.toolSettings.drawColor = globalColor.value;
+            }
 
             document.querySelectorAll('button[data-cmd]').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -2362,10 +2916,54 @@ const App = {
         openRotateModal() { document.getElementById('custom-rot-val-modal').value = 0; document.getElementById('rotate-modal').classList.add('open'); },
         openResizeModal() {
             const p = App.getActiveProject();
+            if(!p) return;
             document.getElementById('resize-w').value = p.width;
             document.getElementById('resize-h').value = p.height;
+            document.getElementById('resize-unit').value = 'px';
+            document.getElementById('resize-constrain').checked = true;
             document.getElementById('resize-modal').classList.add('open');
+            // Store original ratio
+            App.State.resizeRatio = p.width / p.height;
         },
+
+        updateResizeUnit() {
+            const unit = document.getElementById('resize-unit').value;
+            const wInput = document.getElementById('resize-w');
+            const hInput = document.getElementById('resize-h');
+            const p = App.getActiveProject();
+
+            if(unit === 'percent') {
+                wInput.value = 100;
+                hInput.value = 100;
+            } else {
+                wInput.value = p.width;
+                hInput.value = p.height;
+            }
+        },
+
+        syncResize(source) {
+            if(!document.getElementById('resize-constrain').checked) return;
+
+            const unit = document.getElementById('resize-unit').value;
+            const wInput = document.getElementById('resize-w');
+            const hInput = document.getElementById('resize-h');
+            const ratio = App.State.resizeRatio;
+
+            if(unit === 'percent') {
+                if(source === 'w') hInput.value = wInput.value;
+                else wInput.value = hInput.value;
+            } else {
+                // Pixels
+                if(source === 'w') {
+                    const val = parseFloat(wInput.value);
+                    if(!isNaN(val)) hInput.value = Math.round(val / ratio);
+                } else {
+                    const val = parseFloat(hInput.value);
+                    if(!isNaN(val)) wInput.value = Math.round(val * ratio);
+                }
+            }
+        },
+
         openResizeLayerModal() {
             const layer = App.Layers.getActive();
             if(!layer) return;
@@ -2404,7 +3002,16 @@ const App = {
 
             const canvasWrap = document.getElementById('canvas-wrapper');
             canvasWrap.className = ''; 
-            if(tool === 'clone') canvasWrap.classList.add('is-cloning');
+            if(tool === 'clone') {
+                canvasWrap.classList.add('is-cloning');
+                if (App.State.cloneSource) {
+                    const ind = document.getElementById('clone-source-indicator');
+                    ind.style.display = 'block';
+                }
+            } else {
+                document.getElementById('clone-source-indicator').style.display = 'none';
+            }
+
             if(['rect', 'line', 'arrow', 'text'].includes(tool)) canvasWrap.classList.add('is-drawing');
             if(['sel-rect', 'sel-oval', 'sel-lasso', 'sel-wand'].includes(tool)) canvasWrap.classList.add('is-selecting');
             if(tool === 'text') document.getElementById('canvas-area').style.cursor = 'text';
@@ -2467,15 +3074,20 @@ const App = {
                 `;
             } else if(['rect', 'line', 'arrow'].includes(tool)) {
                 html += `
-                    <div class="control-group"><div class="control-label"><span>Color</span></div><input type="color" id="opt-color" value="${App.State.toolSettings.drawColor}"></div>
                     <div class="control-group"><div class="control-label"><span>Thickness</span></div><input type="number" id="opt-size" value="${App.State.toolSettings.drawSize}" min="1" max="50"></div>
                 `;
             } else if (tool === 'paint') {
                 html += `
-                    <div class="control-group"><div class="control-label"><span>Color</span></div><input type="color" id="opt-color" value="${App.State.toolSettings.drawColor}"></div>
                     <div class="control-group"><div class="control-label"><span>Size</span> <span id="lbl-bsize">${App.State.toolSettings.brushSize}px</span></div><input type="range" id="opt-brush-size" value="${App.State.toolSettings.brushSize}" min="5" max="999"></div>
                     <div class="control-group"><div class="control-label"><span>Hardness</span> <span id="lbl-bhard">${App.State.toolSettings.brushHardness}%</span></div><input type="range" id="opt-brush-hard" value="${App.State.toolSettings.brushHardness}" min="0" max="100"></div>
                     <div class="control-group"><div class="control-label"><span>Opacity</span> <span id="lbl-bopac">${App.State.toolSettings.brushOpacity}%</span></div><input type="range" id="opt-brush-opac" value="${App.State.toolSettings.brushOpacity}" min="1" max="100"></div>
+                `;
+            } else if (tool === 'bucket') {
+                const project = App.getActiveProject();
+                html += `
+                    <div class="control-group"><div class="control-label"><span>Tolerance</span> <span id="lbl-tol">${project.selection.wandTolerance || 30}</span></div><input type="range" id="opt-tol" value="${project.selection.wandTolerance || 30}" min="0" max="255"></div>
+                    <div class="control-group"><div class="control-label"><span>Opacity</span> <span id="lbl-bopac">${App.State.toolSettings.brushOpacity}%</span></div><input type="range" id="opt-brush-opac" value="${App.State.toolSettings.brushOpacity}" min="1" max="100"></div>
+                    <div class="control-group"><label style="display:flex; gap:8px; align-items:center;"><input type="checkbox" id="opt-contiguous" ${App.State.toolSettings.wandContiguous!==false?'checked':''} style="width:auto;"> Contiguous</label></div>
                 `;
             } else if (tool === 'eraser' || tool === 'smudge' || tool === 'clone') {
                 html += `
@@ -2491,7 +3103,10 @@ const App = {
                 `;
             } else if (tool === 'sel-wand') {
                 const project = App.getActiveProject();
-                html += `<div class="control-group"><div class="control-label"><span>Tolerance</span> <span id="lbl-tol">${project.selection.wandTolerance || 30}</span></div><input type="range" id="opt-tol" value="${project.selection.wandTolerance || 30}" min="0" max="255"></div>`;
+                html += `
+                    <div class="control-group"><div class="control-label"><span>Tolerance</span> <span id="lbl-tol">${project.selection.wandTolerance || 30}</span></div><input type="range" id="opt-tol" value="${project.selection.wandTolerance || 30}" min="0" max="255"></div>
+                    <div class="control-group"><label style="display:flex; gap:8px; align-items:center;"><input type="checkbox" id="opt-contiguous" ${App.State.toolSettings.wandContiguous!==false?'checked':''} style="width:auto;"> Contiguous</label></div>
+                `;
             } else if (tool === 'crop') {
                 html += `<button class="btn btn-primary" onclick="App.UI.applyCrop()">Apply Crop</button>`;
             } else if (tool === 'zoom') {
@@ -2548,8 +3163,6 @@ const App = {
                 });
             }
 
-            const col = document.getElementById('opt-color');
-            if(col) col.addEventListener('input', e => App.State.toolSettings.drawColor = e.target.value);
             const sz = document.getElementById('opt-size');
             if(sz) sz.addEventListener('input', e => App.State.toolSettings.drawSize = parseInt(e.target.value));
             const bsz = document.getElementById('opt-brush-size');
@@ -2560,6 +3173,8 @@ const App = {
             if(bopac) bopac.addEventListener('input', e => { App.State.toolSettings.brushOpacity = parseInt(e.target.value); document.getElementById('lbl-bopac').innerText = e.target.value + "%"; });
             const tol = document.getElementById('opt-tol');
             if(tol) tol.addEventListener('input', e => { App.getActiveProject().selection.wandTolerance = parseInt(e.target.value); document.getElementById('lbl-tol').innerText = e.target.value; });
+            const cont = document.getElementById('opt-contiguous');
+            if(cont) cont.addEventListener('change', e => App.State.toolSettings.wandContiguous = e.target.checked);
             
             const zSlider = document.getElementById('opt-zoom');
             if(zSlider) {
@@ -2690,19 +3305,49 @@ const App = {
         
         applyResize() {
             const project = App.getActiveProject();
-            const w = parseInt(document.getElementById('resize-w').value);
-            const h = parseInt(document.getElementById('resize-h').value);
+            let w = parseFloat(document.getElementById('resize-w').value);
+            let h = parseFloat(document.getElementById('resize-h').value);
+            const unit = document.getElementById('resize-unit').value;
+
+            if(unit === 'percent') {
+                w = Math.round(project.width * (w / 100));
+                h = Math.round(project.height * (h / 100));
+            } else {
+                w = parseInt(w);
+                h = parseInt(h);
+            }
+
             if(!w || !h || !project) return;
+
+            const oldW = project.width;
+            const oldH = project.height;
+            const scaleX = w / oldW;
+            const scaleY = h / oldH;
+
             project.width = w; project.height = h;
             
             project.layers.forEach(layer => {
-                const t1 = document.createElement('canvas'); t1.width = w; t1.height = h;
-                t1.getContext('2d').drawImage(layer.canvas, 0, 0, w, h);
-                layer.canvas = t1;
-                
-                const t2 = document.createElement('canvas'); t2.width = w; t2.height = h;
-                t2.getContext('2d').drawImage(layer.originalCanvas, 0, 0, w, h);
-                layer.originalCanvas = t2;
+                // Update position and display size
+                layer.x *= scaleX;
+                layer.y *= scaleY;
+                layer.width *= scaleX;
+                layer.height *= scaleY;
+
+                // Resample raster content
+                // We assume we want to resample the raster to match the scale factor
+                // to preserve relative resolution (or reduce it).
+                const newCvsW = Math.max(1, Math.round(layer.canvas.width * scaleX));
+                const newCvsH = Math.max(1, Math.round(layer.canvas.height * scaleY));
+
+                const resizeCanvas = (src) => {
+                    const t = document.createElement('canvas');
+                    t.width = newCvsW; t.height = newCvsH;
+                    t.getContext('2d').drawImage(src, 0, 0, newCvsW, newCvsH);
+                    return t;
+                };
+
+                layer.canvas = resizeCanvas(layer.canvas);
+                layer.originalCanvas = resizeCanvas(layer.originalCanvas);
             });
 
             const main = document.getElementById('main-canvas'); main.width = w; main.height = h;
