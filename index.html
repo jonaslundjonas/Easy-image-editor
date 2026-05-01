@@ -461,6 +461,16 @@
                     </div>
                 </div>
             </div>
+            <div class="dropdown" id="menu-help">
+                <button class="btn dropdown-trigger" style="border:none; background: transparent; padding: 5px 10px;">
+                    <i class="ph ph-question"></i> Help <i class="ph ph-caret-down"></i>
+                </button>
+                <div class="dropdown-content">
+                    <div class="dropdown-item" onclick="App.UI.openHelpModal()">
+                        <i class="ph ph-info"></i> Tool Descriptions
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="file-info" id="filename-display"></div>
@@ -747,6 +757,19 @@
             <div class="modal-actions">
                 <button class="btn" onclick="App.UI.closeModal('resize-modal')">Cancel</button>
                 <button class="btn btn-primary" onclick="App.UI.applyResize()">Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div class="modal-backdrop" id="help-modal">
+        <div class="modal" style="width: 400px; max-height: 80vh; display: flex; flex-direction: column;">
+            <h3>Tool Descriptions</h3>
+            <div id="help-content" style="overflow-y: auto; flex: 1; padding-right: 10px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px;">
+                <!-- Injected via JS -->
+            </div>
+            <div class="modal-actions" style="margin-top: auto;">
+                <button class="btn btn-primary" onclick="App.UI.closeModal('help-modal')">Close</button>
             </div>
         </div>
     </div>
@@ -3083,6 +3106,25 @@ const App = {
         openNewModal() { document.getElementById('new-image-modal').classList.add('open'); },
         closeModal(id) { document.getElementById(id).classList.remove('open'); },
         openSaveModal() { document.getElementById('save-name').value = App.getActiveProject().filename + "-edit"; document.getElementById('save-modal').classList.add('open'); },
+        
+        openHelpModal() {
+            const content = document.getElementById('help-content');
+            content.innerHTML = '';
+            for (const [id, def] of Object.entries(this.toolDefs)) {
+                content.innerHTML += `
+                    <div style="display: flex; align-items: center; gap: 15px; padding: 8px 0; border-bottom: 1px solid var(--border);">
+                        <div style="width: 36px; height: 36px; background: var(--bg-surface); border-radius: var(--radius); display: flex; align-items: center; justify-content: center;">
+                            <i class="ph ${def.icon}" style="font-size: 20px; color: var(--text-main);"></i>
+                        </div>
+                        <div style="flex: 1;">
+                            <strong style="display: block; font-size: 13px; color: var(--text-main);">${def.title}</strong>
+                            <span style="font-size: 11px; color: var(--text-muted);">Tool ID: ${id}</span>
+                        </div>
+                    </div>
+                `;
+            }
+            document.getElementById('help-modal').classList.add('open');
+        },
         openRotateModal() { document.getElementById('custom-rot-val-modal').value = 0; document.getElementById('rotate-modal').classList.add('open'); },
         openSelectSimilarModal() {
             const p = App.getActiveProject();
