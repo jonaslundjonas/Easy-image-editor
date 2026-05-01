@@ -766,44 +766,75 @@
         <div class="modal" style="width: 600px; max-height: 85vh; display: flex; flex-direction: column;">
             <h3>User Guide & Help</h3>
             <div id="help-content" style="overflow-y: auto; flex: 1; padding-right: 15px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 15px; font-size: 13px; line-height: 1.5; color: var(--text-muted);">
-                
+                <!-- Comprehensive Guide -->
                 <div style="color: var(--text-main);">
-                    <h4 style="margin: 0 0 5px 0; color: var(--accent);">Getting Started</h4>
-                    <p style="margin: 0 0 10px 0;">Use the <strong>File</strong> menu to create a new project, open an existing image, or save your work. The editor supports drag-and-dropping files directly onto the canvas. You can open standard images and even PDF and TIFF files.</p>
-                </div>
-
-                <div style="color: var(--text-main);">
-                    <h4 style="margin: 0 0 5px 0; color: var(--accent);">Layer Management</h4>
-                    <p style="margin: 0 0 10px 0;">The sidebar on the right manages your layers. You can add, duplicate, delete, and rearrange layers using the top buttons. Adjust the <strong>Opacity</strong> and <strong>Blend Mode</strong> of the active layer to create complex compositions. Select a layer by clicking it in the list.</p>
-                </div>
-
-                <div style="color: var(--text-main);">
-                    <h4 style="margin: 0 0 5px 0; color: var(--accent);">Toolbar Functions</h4>
-                    <ul style="margin: 0; padding-left: 20px;">
-                        <li><strong>Move (<i class="ph ph-arrows-out"></i>)</strong>: Move the active layer around the canvas.</li>
-                        <li><strong>Hand (<i class="ph ph-hand-palm"></i>)</strong>: Pan your view of the canvas (shortcut: Hold Spacebar).</li>
-                        <li><strong>Selection (<i class="ph ph-selection-plus"></i>)</strong>: Draw rectangular or oval selections. Hold Shift to add to an existing selection. Use Ctrl+D to deselect.</li>
-                        <li><strong>Magic Wand (<i class="ph ph-magic-wand"></i>)</strong>: Select contiguous or non-contiguous areas of similar color. Adjust tolerance in Tool Options.</li>
-                        <li><strong>Clone Stamp (<i class="ph ph-stamp"></i>)</strong>: Alt+Click (or Option+Click) to set a source point, then paint to clone from that area.</li>
-                        <li><strong>Paint Tools (<i class="ph ph-paint-brush"></i> / <i class="ph ph-paint-bucket"></i>)</strong>: Draw freehand or fill areas with the global color. Set the global color using the color picker at the bottom of the toolbar.</li>
-                        <li><strong>Transform (<i class="ph ph-arrows-out-cardinal"></i>)</strong>: Located in the top menu. Rotate, flip, or use Free Transform to scale and rotate layers interactively.</li>
+                    <h4 style="margin: 0 0 8px 0; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 4px;">1. Getting Started</h4>
+                    <p style="margin: 0 0 8px 0;">Welcome to Kretz Image Editor Pro! Here is how to begin your creative process:</p>
+                    <ul style="margin: 0 0 15px 0; padding-left: 20px;">
+                        <li style="margin-bottom: 4px;"><strong>Creating a New Project:</strong> Navigate to <code>File > New Project</code>. Set your canvas dimensions and background color (Transparent, White, or Black).</li>
+                        <li style="margin-bottom: 4px;"><strong>Opening Images:</strong> Go to <code>File > Open Image</code> or simply drag-and-drop any image file directly onto the canvas. We support JPG, PNG, WEBP, PDF, and TIFF file formats.</li>
+                        <li style="margin-bottom: 4px;"><strong>Saving:</strong> Go to <code>File > Save Current</code>. You can export your composition as PNG, JPG (with quality settings), WEBP, or a multi-page PDF document.</li>
                     </ul>
                 </div>
 
                 <div style="color: var(--text-main);">
-                    <h4 style="margin: 0 0 5px 0; color: var(--accent);">Adjustments & Effects</h4>
-                    <p style="margin: 0 0 10px 0;">Apply non-destructive visual adjustments like Brightness, Contrast, Saturation, Blur, and Vignette from the right sidebar. These filters apply dynamically to your active layer.</p>
+                    <h4 style="margin: 0 0 8px 0; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 4px;">2. Understanding Layers</h4>
+                    <p style="margin: 0 0 8px 0;">The application is built around a non-destructive layer system, located in the right sidebar. The topmost layer in the list renders in front of layers below it.</p>
+                    <ul style="margin: 0 0 15px 0; padding-left: 20px;">
+                        <li style="margin-bottom: 4px;"><strong>Active Layer:</strong> Click a layer in the sidebar to select it. All adjustments, drawing, and transformations apply <i>only</i> to the active layer.</li>
+                        <li style="margin-bottom: 4px;"><strong>Layer Actions:</strong> Use the small buttons at the top of the Layers panel to: Add an empty layer (<i class="ph ph-plus"></i>), Duplicate (<i class="ph ph-copy"></i>), Delete (<i class="ph ph-trash"></i>), Move Up/Down (<i class="ph ph-arrow-up"></i> <i class="ph ph-arrow-down"></i>), or Merge Down (<i class="ph ph-arrows-merge"></i>).</li>
+                        <li style="margin-bottom: 4px;"><strong>Blend Modes & Opacity:</strong> Change how the active layer blends with layers beneath it (e.g. Multiply for shadows, Screen for highlights). Use the Opacity slider to adjust transparency.</li>
+                    </ul>
                 </div>
 
                 <div style="color: var(--text-main);">
-                    <h4 style="margin: 0 0 5px 0; color: var(--accent);">Keyboard Shortcuts</h4>
-                    <ul style="margin: 0; padding-left: 20px;">
-                        <li><strong>Ctrl+Z / Ctrl+Y</strong>: Undo / Redo</li>
-                        <li><strong>Ctrl+C / Ctrl+V</strong>: Copy / Paste Selection</li>
-                        <li><strong>Ctrl+A / Ctrl+D</strong>: Select All / Deselect</li>
-                        <li><strong>Spacebar (Hold)</strong>: Pan Canvas</li>
-                        <li><strong>Shift (Hold)</strong>: Add to selection</li>
+                    <h4 style="margin: 0 0 8px 0; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 4px;">3. The Toolbar Explained</h4>
+                    <p style="margin: 0 0 8px 0;">The left toolbar contains your primary editing instruments. Some tools share a group—long press or right click on an icon with a tiny arrow to reveal hidden tools.</p>
+                    
+                    <h5 style="margin: 0 0 4px 0;">Navigation</h5>
+                    <ul style="margin: 0 0 8px 0; padding-left: 20px;">
+                        <li><strong>Move Tool (<i class="ph ph-arrows-out"></i>):</strong> Click and drag to reposition the active layer.</li>
+                        <li><strong>Hand Tool (<i class="ph ph-hand-palm"></i>):</strong> Pan your view across the canvas. <em>Shortcut: Hold down the Spacebar while using any other tool to temporarily pan.</em></li>
+                        <li><strong>Zoom Tool (<i class="ph ph-magnifying-glass"></i>):</strong> Click to zoom in, hold Alt/Option and click to zoom out. <em>Shortcut: Scroll wheel to zoom.</em></li>
                     </ul>
+
+                    <h5 style="margin: 0 0 4px 0;">Selection & Masking</h5>
+                    <ul style="margin: 0 0 8px 0; padding-left: 20px;">
+                        <li><strong>Marquee / Oval / Lasso:</strong> Draw boundaries to isolate parts of your layer for editing or copying. <em>Shortcut: Hold Shift while selecting to add to your current selection.</em></li>
+                        <li><strong>Magic Wand (<i class="ph ph-magic-wand"></i>):</strong> Automatically select areas of similar color. You can adjust the 'Tolerance' (how strictly colors must match) and toggle 'Contiguous' mode in the Tool Options panel.</li>
+                    </ul>
+
+                    <h5 style="margin: 0 0 4px 0;">Retouching & Painting</h5>
+                    <ul style="margin: 0 0 8px 0; padding-left: 20px;">
+                        <li><strong>Paint Brush (<i class="ph ph-paint-brush"></i>):</strong> Draw freehand. Adjust the size, hardness, and opacity in the Tool Options panel.</li>
+                        <li><strong>Paint Bucket (<i class="ph ph-paint-bucket"></i>):</strong> Fill an area with the active global color.</li>
+                        <li><strong>Clone Stamp (<i class="ph ph-stamp"></i>):</strong> Hold Alt/Option and click on the canvas to define a source area. Then, click and drag elsewhere to paint using pixels from the source area.</li>
+                        <li><strong>Smudge Tool (<i class="ph ph-hand-pointing"></i>):</strong> Drag across pixels to push and blur them together, simulating wet paint.</li>
+                    </ul>
+                </div>
+
+                <div style="color: var(--text-main);">
+                    <h4 style="margin: 0 0 8px 0; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 4px;">4. Transformations & Adjustments</h4>
+                    <p style="margin: 0 0 8px 0;">Located in the right sidebar below the Layers panel are dynamic settings for the active layer.</p>
+                    <ul style="margin: 0 0 15px 0; padding-left: 20px;">
+                        <li style="margin-bottom: 4px;"><strong>Color Correction:</strong> Sliders for Brightness, Contrast, Saturation, White/Black points. These apply via CSS filters and are completely non-destructive.</li>
+                        <li style="margin-bottom: 4px;"><strong>Effects:</strong> Add Gaussian Blur, Pixelation, or a Vignette effect.</li>
+                        <li style="margin-bottom: 4px;"><strong>Free Transform:</strong> Click 'Free Transform' to reveal control handles on your layer. Drag the corners to resize, hold Shift to constrain proportions, or hover just outside the corners to rotate. Click 'Apply' when finished.</li>
+                    </ul>
+                </div>
+
+                <div style="color: var(--text-main);">
+                    <h4 style="margin: 0 0 8px 0; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 4px;">5. Essential Keyboard Shortcuts</h4>
+                    <table style="width: 100%; text-align: left; border-collapse: collapse; margin-bottom: 15px;">
+                        <tbody>
+                            <tr><td style="padding: 4px 0; width: 40%;"><strong>Ctrl+Z</strong> / <strong>Ctrl+Y</strong></td><td>Undo / Redo your last action</td></tr>
+                            <tr><td style="padding: 4px 0;"><strong>Ctrl+C</strong> / <strong>Ctrl+V</strong></td><td>Copy active selection / Paste to new layer</td></tr>
+                            <tr><td style="padding: 4px 0;"><strong>Ctrl+A</strong> / <strong>Ctrl+D</strong></td><td>Select All / Clear Selection</td></tr>
+                            <tr><td style="padding: 4px 0;"><strong>Hold Spacebar</strong></td><td>Temporarily activate Hand Tool (Pan)</td></tr>
+                            <tr><td style="padding: 4px 0;"><strong>Hold Shift</strong></td><td>Add to existing selection or Constrain Proportions</td></tr>
+                            <tr><td style="padding: 4px 0;"><strong>Hold Alt / Option</strong></td><td>Set Clone Stamp source or Zoom Out</td></tr>
+                        </tbody>
+                    </table>
                 </div>
 
             </div>
