@@ -763,12 +763,51 @@
 
     <!-- Help Modal -->
     <div class="modal-backdrop" id="help-modal">
-        <div class="modal" style="width: 400px; max-height: 80vh; display: flex; flex-direction: column;">
-            <h3>Tool Descriptions</h3>
-            <div id="help-content" style="overflow-y: auto; flex: 1; padding-right: 10px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 10px;">
-                <!-- Injected via JS -->
+        <div class="modal" style="width: 600px; max-height: 85vh; display: flex; flex-direction: column;">
+            <h3>User Guide & Help</h3>
+            <div id="help-content" style="overflow-y: auto; flex: 1; padding-right: 15px; margin-bottom: 15px; display: flex; flex-direction: column; gap: 15px; font-size: 13px; line-height: 1.5; color: var(--text-muted);">
+                
+                <div style="color: var(--text-main);">
+                    <h4 style="margin: 0 0 5px 0; color: var(--accent);">Getting Started</h4>
+                    <p style="margin: 0 0 10px 0;">Use the <strong>File</strong> menu to create a new project, open an existing image, or save your work. The editor supports drag-and-dropping files directly onto the canvas. You can open standard images and even PDF and TIFF files.</p>
+                </div>
+
+                <div style="color: var(--text-main);">
+                    <h4 style="margin: 0 0 5px 0; color: var(--accent);">Layer Management</h4>
+                    <p style="margin: 0 0 10px 0;">The sidebar on the right manages your layers. You can add, duplicate, delete, and rearrange layers using the top buttons. Adjust the <strong>Opacity</strong> and <strong>Blend Mode</strong> of the active layer to create complex compositions. Select a layer by clicking it in the list.</p>
+                </div>
+
+                <div style="color: var(--text-main);">
+                    <h4 style="margin: 0 0 5px 0; color: var(--accent);">Toolbar Functions</h4>
+                    <ul style="margin: 0; padding-left: 20px;">
+                        <li><strong>Move (<i class="ph ph-arrows-out"></i>)</strong>: Move the active layer around the canvas.</li>
+                        <li><strong>Hand (<i class="ph ph-hand-palm"></i>)</strong>: Pan your view of the canvas (shortcut: Hold Spacebar).</li>
+                        <li><strong>Selection (<i class="ph ph-selection-plus"></i>)</strong>: Draw rectangular or oval selections. Hold Shift to add to an existing selection. Use Ctrl+D to deselect.</li>
+                        <li><strong>Magic Wand (<i class="ph ph-magic-wand"></i>)</strong>: Select contiguous or non-contiguous areas of similar color. Adjust tolerance in Tool Options.</li>
+                        <li><strong>Clone Stamp (<i class="ph ph-stamp"></i>)</strong>: Alt+Click (or Option+Click) to set a source point, then paint to clone from that area.</li>
+                        <li><strong>Paint Tools (<i class="ph ph-paint-brush"></i> / <i class="ph ph-paint-bucket"></i>)</strong>: Draw freehand or fill areas with the global color. Set the global color using the color picker at the bottom of the toolbar.</li>
+                        <li><strong>Transform (<i class="ph ph-arrows-out-cardinal"></i>)</strong>: Located in the top menu. Rotate, flip, or use Free Transform to scale and rotate layers interactively.</li>
+                    </ul>
+                </div>
+
+                <div style="color: var(--text-main);">
+                    <h4 style="margin: 0 0 5px 0; color: var(--accent);">Adjustments & Effects</h4>
+                    <p style="margin: 0 0 10px 0;">Apply non-destructive visual adjustments like Brightness, Contrast, Saturation, Blur, and Vignette from the right sidebar. These filters apply dynamically to your active layer.</p>
+                </div>
+
+                <div style="color: var(--text-main);">
+                    <h4 style="margin: 0 0 5px 0; color: var(--accent);">Keyboard Shortcuts</h4>
+                    <ul style="margin: 0; padding-left: 20px;">
+                        <li><strong>Ctrl+Z / Ctrl+Y</strong>: Undo / Redo</li>
+                        <li><strong>Ctrl+C / Ctrl+V</strong>: Copy / Paste Selection</li>
+                        <li><strong>Ctrl+A / Ctrl+D</strong>: Select All / Deselect</li>
+                        <li><strong>Spacebar (Hold)</strong>: Pan Canvas</li>
+                        <li><strong>Shift (Hold)</strong>: Add to selection</li>
+                    </ul>
+                </div>
+
             </div>
-            <div class="modal-actions" style="margin-top: auto;">
+            <div class="modal-actions" style="margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border);">
                 <button class="btn btn-primary" onclick="App.UI.closeModal('help-modal')">Close</button>
             </div>
         </div>
@@ -3108,21 +3147,6 @@ const App = {
         openSaveModal() { document.getElementById('save-name').value = App.getActiveProject().filename + "-edit"; document.getElementById('save-modal').classList.add('open'); },
         
         openHelpModal() {
-            const content = document.getElementById('help-content');
-            content.innerHTML = '';
-            for (const [id, def] of Object.entries(this.toolDefs)) {
-                content.innerHTML += `
-                    <div style="display: flex; align-items: center; gap: 15px; padding: 8px 0; border-bottom: 1px solid var(--border);">
-                        <div style="width: 36px; height: 36px; background: var(--bg-surface); border-radius: var(--radius); display: flex; align-items: center; justify-content: center;">
-                            <i class="ph ${def.icon}" style="font-size: 20px; color: var(--text-main);"></i>
-                        </div>
-                        <div style="flex: 1;">
-                            <strong style="display: block; font-size: 13px; color: var(--text-main);">${def.title}</strong>
-                            <span style="font-size: 11px; color: var(--text-muted);">Tool ID: ${id}</span>
-                        </div>
-                    </div>
-                `;
-            }
             document.getElementById('help-modal').classList.add('open');
         },
         openRotateModal() { document.getElementById('custom-rot-val-modal').value = 0; document.getElementById('rotate-modal').classList.add('open'); },
