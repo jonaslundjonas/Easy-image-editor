@@ -465,7 +465,7 @@
 
         <div class="file-info" id="filename-display"></div>
         
-        <input type="file" id="file-input" hidden accept="image/*,application/pdf">
+        <input type="file" id="file-input" hidden accept="image/*,application/pdf,.tif,.tiff">
     </header>
 
     <!-- TABS -->
@@ -1377,15 +1377,44 @@ const App = {
         loadFile(file) {
             App.UI.setBusy(true);
             const reader = new FileReader();
+            const isTIFF = file.type === 'image/tiff' || file.name.toLowerCase().endsWith('.tif') || file.name.toLowerCase().endsWith('.tiff');
             reader.onload = (e) => {
                 if (file.type === 'application/pdf') this.loadPDF(e.target.result);
+                else if (isTIFF) this.loadTIFF(e.target.result, file.name);
                 else {
                     this.loadImageSrc(e.target.result, file.name);
                     if(file.type === 'image/jpeg') this.readEXIF(file);
                 }
             };
-            if(file.type === 'application/pdf') reader.readAsArrayBuffer(file);
+            if(file.type === 'application/pdf' || isTIFF) reader.readAsArrayBuffer(file);
             else reader.readAsDataURL(file);
+        },
+
+        loadTIFF(buffer, name) {
+            try {
+                const ifds = UTIF.decode(buffer);
+                UTIF.decodeImage(buffer, ifds[0]);
+                const rgba = UTIF.toRGBA8(ifds[0]);
+                const w = ifds[0].width;
+                const h = ifds[0].height;
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                const imgData = new ImageData(new Uint8ClampedArray(rgba), w, h);
+                ctx.putImageData(imgData, 0, 0);
+                
+                const img = new Image();
+                img.onload = () => {
+                    this.createProjectFromImage(img, name);
+                    App.UI.setBusy(false);
+                };
+                img.src = canvas.toDataURL();
+            } catch (e) {
+                console.error("Failed to load TIFF", e);
+                alert("Failed to load TIFF image.");
+                App.UI.setBusy(false);
+            }
         },
 
         loadImageSrc(src, name) {
@@ -2889,7 +2918,8 @@ const App = {
             { id: 'grp-lasso', tools: ['sel-lasso'] },
             { id: 'grp-magic', tools: ['sel-wand', 'sel-brush'] },
             { id: 'grp-crop', tools: ['crop'] },
-            { id: 'grp-draw', tools: ['paint', 'bucket'] },
+            { id: 'grp-paint', tools: ['paint'] },
+            { id: 'grp-bucket', tools: ['bucket'] },
             { id: 'grp-retouch', tools: ['clone', 'smudge'] },
             { id: 'grp-eraser', tools: ['eraser'] },
             { id: 'grp-shape', tools: ['rect', 'circle', 'line', 'arrow'] },

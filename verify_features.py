@@ -24,7 +24,7 @@ def run(playwright):
     # Click 400, 300.
     page.mouse.click(400, 300)
     time.sleep(0.5)
-    page.screenshot(path="/home/jules/verification/1_bucket_fill.png")
+    page.screenshot(path="./verification/1_bucket_fill.png")
 
     # 2. Test Duplicate Layer
     # Current layer is Red.
@@ -37,13 +37,13 @@ def run(playwright):
     # Check text in layers-container.
     # content = page.inner_text('#layers-container')
     # print("Layers:", content)
-    page.screenshot(path="/home/jules/verification/2_duplicate_layer.png")
+    page.screenshot(path="./verification/2_duplicate_layer.png")
 
     # 3. Test Select All (Ctrl+A)
     page.keyboard.press("Control+A")
     time.sleep(0.5)
     # Should see outline around entire canvas (800x600).
-    page.screenshot(path="/home/jules/verification/3_select_all.png")
+    page.screenshot(path="./verification/3_select_all.png")
 
     # 4. Test Additive Selection (Shift)
     # Clear Selection
@@ -65,7 +65,7 @@ def run(playwright):
     page.keyboard.up("Shift")
 
     time.sleep(0.5)
-    page.screenshot(path="/home/jules/verification/4_additive_select.png")
+    page.screenshot(path="./verification/4_additive_select.png")
 
     # 5. Test Transform Pivot & Aspect Ratio
     # Select Move Tool
@@ -73,7 +73,7 @@ def run(playwright):
     # Start Transform
     page.evaluate("App.UI.startTransform()")
     time.sleep(0.2)
-    page.screenshot(path="/home/jules/verification/5_transform_start.png")
+    page.screenshot(path="./verification/5_transform_start.png")
 
     # Drag TL handle. Pivot is BR.
     # TL handle is at x,y.
@@ -106,7 +106,7 @@ def run(playwright):
     page.keyboard.up("Shift")
 
     time.sleep(0.5)
-    page.screenshot(path="/home/jules/verification/6_transform_shift.png")
+    page.screenshot(path="./verification/6_transform_shift.png")
 
     # Apply
     page.click('button[onclick="App.UI.applyTransform()"]')
