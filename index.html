@@ -471,6 +471,12 @@
                     </div>
                 </div>
             </div>
+
+            <div style="display: flex; align-items: center; gap: 8px; margin-left: 20px; border-left: 1px solid var(--border); padding-left: 15px;">
+                <i class="ph ph-magnifying-glass" style="font-size:14px; color:var(--text-muted);"></i>
+                <input type="range" id="top-zoom-slider" min="10" max="500" value="100" style="width: 100px;">
+                <span id="top-zoom-val" style="font-size: 11px; width: 35px; text-align: right;">100%</span>
+            </div>
         </div>
 
         <div class="file-info" id="filename-display"></div>
@@ -2574,46 +2580,50 @@ const App = {
             bCtx.fillStyle = gradient;
             bCtx.fillRect(0, 0, size, size);
 
+            // Grab pixels from the CURRENT live layer canvas (which includes previous smudges in this stroke)
+            // Need integer coordinates for predictable sampling
+            const fromX = Math.floor(fromPos.x);
+            const fromY = Math.floor(fromPos.y);
+
             const srcCvs = document.createElement('canvas');
             srcCvs.width = size; srcCvs.height = size;
             const sCtx = srcCvs.getContext('2d');
-            sCtx.drawImage(layer.canvas, fromPos.x - rad, fromPos.y - rad, size, size, 0, 0, size, size);
+            sCtx.drawImage(layer.canvas, fromX - rad, fromY - rad, size, size, 0, 0, size, size);
 
             sCtx.globalCompositeOperation = 'destination-in';
             sCtx.drawImage(brush, 0, 0);
 
-            const opacity = settings.brushOpacity / 100;
+            const opacity = (settings.brushOpacity / 100) * 0.5; // Smudge strength is usually gentler
             const selMask = this.getSelectionMaskForLayer(layer);
 
-            if (App.State.strokeCvs) {
-                const sCtx = App.State.strokeCvs.getContext('2d');
-                sCtx.globalCompositeOperation = 'source-over';
-                sCtx.drawImage(srcCvs, toPos.x - rad, toPos.y - rad);
+            const drawTo = (targetCtx) => {
+                targetCtx.save();
+                targetCtx.globalAlpha = opacity;
+                if (selMask) {
+                     const maskedSmudge = document.createElement('canvas');
+                     maskedSmudge.width = layer.canvas.width; maskedSmudge.height = layer.canvas.height;
+                     const mCtx = maskedSmudge.getContext('2d');
 
-                ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
-                ctx.drawImage(App.State.layerSnapshot, 0, 0);
-                oCtx.clearRect(0, 0, layer.originalCanvas.width, layer.originalCanvas.height);
-                oCtx.drawImage(App.State.origSnapshot, 0, 0);
+                     mCtx.drawImage(srcCvs, toPos.x - rad, toPos.y - rad);
+                     mCtx.globalCompositeOperation = 'destination-in';
+                     mCtx.drawImage(selMask, 0, 0);
 
-                const finalStrokeCvs = document.createElement('canvas');
-                finalStrokeCvs.width = layer.canvas.width; finalStrokeCvs.height = layer.canvas.height;
-                const fsCtx = finalStrokeCvs.getContext('2d');
-                fsCtx.drawImage(App.State.strokeCvs, 0, 0);
-
-                if(selMask) {
-                     fsCtx.globalCompositeOperation = 'destination-in';
-                     fsCtx.drawImage(selMask, 0, 0);
+                     targetCtx.drawImage(maskedSmudge, 0, 0);
+                } else {
+                     targetCtx.drawImage(srcCvs, toPos.x - rad, toPos.y - rad);
                 }
+                targetCtx.restore();
+            };
 
-                ctx.save();
-                ctx.globalAlpha = opacity;
-                ctx.drawImage(finalStrokeCvs, 0, 0);
-                ctx.restore();
+            drawTo(ctx);
+            drawTo(oCtx);
 
-                oCtx.save();
-                oCtx.globalAlpha = opacity;
-                oCtx.drawImage(finalStrokeCvs, 0, 0);
-                oCtx.restore();
+            // Update layer snapshot so other tools in the same stroke wouldn't revert this (though we only use one tool per stroke)
+            if (App.State.layerSnapshot) {
+                App.State.layerSnapshot.getContext('2d').clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+                App.State.layerSnapshot.getContext('2d').drawImage(layer.canvas, 0, 0);
+                App.State.origSnapshot.getContext('2d').clearRect(0, 0, layer.originalCanvas.width, layer.originalCanvas.height);
+                App.State.origSnapshot.getContext('2d').drawImage(layer.originalCanvas, 0, 0);
             }
 
             App.Render.update();
@@ -3105,6 +3115,18 @@ const App = {
                 });
             });
             
+            const topZoom = document.getElementById('top-zoom-slider');
+            if (topZoom) {
+                topZoom.addEventListener('input', e => {
+                    const project = App.getActiveProject();
+                    if(project) {
+                        project.zoom = e.target.value / 100;
+                        document.getElementById('top-zoom-val').innerText = e.target.value + '%';
+                        App.Render.update();
+                    }
+                });
+            }
+
             document.querySelectorAll('input[data-filter]').forEach(input => {
                 input.addEventListener('input', (e) => {
                     const key = e.target.dataset.filter;
