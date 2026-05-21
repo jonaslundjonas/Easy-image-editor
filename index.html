@@ -471,11 +471,17 @@
                     </div>
                 </div>
             </div>
+
+            <div style="display: flex; align-items: center; gap: 8px; margin-left: 20px; border-left: 1px solid var(--border); padding-left: 15px;">
+                <i class="ph ph-magnifying-glass" style="font-size:14px; color:var(--text-muted);"></i>
+                <input type="range" id="top-zoom-slider" min="10" max="500" value="100" style="width: 100px;">
+                <span id="top-zoom-val" style="font-size: 11px; width: 35px; text-align: right;">100%</span>
+            </div>
         </div>
 
         <div class="file-info" id="filename-display"></div>
         
-        <input type="file" id="file-input" hidden accept="image/*,application/pdf,.tif,.tiff">
+        <input type="file" id="file-input" hidden accept="image/*,application/pdf,.tif,.tiff,.kiep">
     </header>
 
     <!-- TABS -->
@@ -662,6 +668,7 @@
                 <option value="image/png">PNG</option>
                 <option value="image/jpeg">JPG (90%)</option>
                 <option value="image/webp">WebP</option>
+                <option value="application/kiep">KIEP Project</option>
                 <option value="application/pdf">PDF</option>
             </select>
             <div class="modal-actions">
@@ -772,8 +779,8 @@
                     <p style="margin: 0 0 8px 0;">Welcome to Kretz Image Editor Pro! Here is how to begin your creative process:</p>
                     <ul style="margin: 0 0 15px 0; padding-left: 20px;">
                         <li style="margin-bottom: 4px;"><strong>Creating a New Project:</strong> Navigate to <code>File > New Project</code>. Set your canvas dimensions and background color (Transparent, White, or Black).</li>
-                        <li style="margin-bottom: 4px;"><strong>Opening Images:</strong> Go to <code>File > Open Image</code> or simply drag-and-drop any image file directly onto the canvas. We support JPG, PNG, WEBP, PDF, and TIFF file formats.</li>
-                        <li style="margin-bottom: 4px;"><strong>Saving:</strong> Go to <code>File > Save Current</code>. You can export your composition as PNG, JPG (with quality settings), WEBP, or a multi-page PDF document.</li>
+                        <li style="margin-bottom: 4px;"><strong>Opening Images:</strong> Go to <code>File > Open Image</code> or simply drag-and-drop any image file directly onto the canvas. We support JPG, PNG, WEBP, PDF, TIFF, and KIEP (.kiep) project files.</li>
+                        <li style="margin-bottom: 4px;"><strong>Saving:</strong> Go to <code>File > Save Current</code>. You can export your composition as PNG, JPG (with quality settings), WEBP, or a multi-page PDF document. You can also save your composition as a <strong>KIEP Project (.kiep)</strong> which preserves your layers, editing state, and history for your next session.</li>
                     </ul>
                 </div>
 
@@ -806,7 +813,7 @@
 
                     <h5 style="margin: 0 0 4px 0;">Retouching & Painting</h5>
                     <ul style="margin: 0 0 8px 0; padding-left: 20px;">
-                        <li><strong>Paint Brush (<i class="ph ph-paint-brush"></i>):</strong> Draw freehand. Adjust the size, hardness, and opacity in the Tool Options panel.</li>
+                        <li><strong>Paint Brush (<i class="ph ph-paint-brush"></i>):</strong> Draw freehand. Adjust the size, hardness, and opacity in the Tool Options panel. Note that strokes drawn with lower opacity levels build up correctly and prevent dark spots where paths overlap on a single stroke.</li>
                         <li><strong>Paint Bucket (<i class="ph ph-paint-bucket"></i>):</strong> Fill an area with the active global color.</li>
                         <li><strong>Clone Stamp (<i class="ph ph-stamp"></i>):</strong> Hold Alt/Option and click on the canvas to define a source area. Then, click and drag elsewhere to paint using pixels from the source area.</li>
                         <li><strong>Smudge Tool (<i class="ph ph-hand-pointing"></i>):</strong> Drag across pixels to push and blur them together, simulating wet paint.</li>
@@ -827,7 +834,7 @@
                     <h4 style="margin: 0 0 8px 0; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 4px;">5. Essential Keyboard Shortcuts</h4>
                     <table style="width: 100%; text-align: left; border-collapse: collapse; margin-bottom: 15px;">
                         <tbody>
-                            <tr><td style="padding: 4px 0; width: 40%;"><strong>Ctrl+Z</strong> / <strong>Ctrl+Y</strong></td><td>Undo / Redo your last action</td></tr>
+                            <tr><td style="padding: 4px 0; width: 40%;"><strong>Ctrl+Z</strong> / <strong>Ctrl+Y (or Ctrl+Shift+Z)</strong></td><td>Undo / Redo your last action. Supported on Windows, macOS (Cmd+Z), Linux, and ChromeOS.</td></tr>
                             <tr><td style="padding: 4px 0;"><strong>Ctrl+C</strong> / <strong>Ctrl+V</strong></td><td>Copy active selection / Paste to new layer</td></tr>
                             <tr><td style="padding: 4px 0;"><strong>Ctrl+A</strong> / <strong>Ctrl+D</strong></td><td>Select All / Clear Selection</td></tr>
                             <tr><td style="padding: 4px 0;"><strong>Hold Spacebar</strong></td><td>Temporarily activate Hand Tool (Pan)</td></tr>
@@ -1469,6 +1476,27 @@ const App = {
 
         loadFile(file) {
             App.UI.setBusy(true);
+            if(file.name.toLowerCase().endsWith('.kiep')) {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    try {
+                        const state = JSON.parse(e.target.result);
+                        App.IO.createNewProject(file.name);
+                        // Using setTimeout to let UI update after project creation
+                        setTimeout(() => {
+                            App.History.restore(state);
+                            App.UI.setBusy(false);
+                        }, 50);
+                    } catch(err) {
+                        console.error("Failed to parse KIEP file", err);
+                        alert("Failed to load KIEP project file.");
+                        App.UI.setBusy(false);
+                    }
+                };
+                reader.readAsText(file);
+                return;
+            }
+
             const reader = new FileReader();
             const isTIFF = file.type === 'image/tiff' || file.name.toLowerCase().endsWith('.tif') || file.name.toLowerCase().endsWith('.tiff');
             reader.onload = (e) => {
@@ -1605,7 +1633,15 @@ const App = {
             const canvas = document.getElementById('main-canvas');
             App.Render.update();
             
-            if (format === 'application/pdf') {
+            if (format === 'application/kiep') {
+                App.History.push();
+                const state = project.history[project.historyIndex];
+                const blob = new Blob([JSON.stringify(state)], {type: 'application/json'});
+                const link = document.createElement('a');
+                link.download = name + '.kiep';
+                link.href = URL.createObjectURL(blob);
+                link.click();
+            } else if (format === 'application/pdf') {
                 const { jsPDF } = window.jspdf;
                 const pdf = new jsPDF({ orientation: canvas.width > canvas.height ? 'l' : 'p', unit: 'px', format: [canvas.width, canvas.height] });
                 pdf.addImage(canvas.toDataURL('image/jpeg'), 'JPEG', 0, 0, canvas.width, canvas.height);
@@ -1642,6 +1678,15 @@ const App = {
                     if(e.key === 'c' || e.key === 'C') { e.preventDefault(); this.copySelection(); }
                     if(e.key === 'v' || e.key === 'V') { e.preventDefault(); this.pasteSelection(); }
                     if(e.key === 'a' || e.key === 'A') { e.preventDefault(); this.selectAll(); }
+                    if(e.key === 'z' || e.key === 'Z') {
+                        e.preventDefault();
+                        if (e.shiftKey) App.History.redo();
+                        else App.History.undo();
+                    }
+                    if(e.key === 'y' || e.key === 'Y') {
+                        e.preventDefault();
+                        App.History.redo();
+                    }
                 }
             });
             window.addEventListener('keyup', e => {
@@ -1829,6 +1874,17 @@ const App = {
             if(tool === 'paint' || tool === 'eraser' || tool === 'sel-brush' || tool === 'smudge') {
                 App.State.isDrawing = true;
                 App.State.lastMouse = pos;
+                const layer = App.Layers.getActive();
+                if(layer && (tool === 'paint' || tool === 'eraser' || tool === 'clone' || tool === 'smudge')) {
+                    App.State.strokeCvs = document.createElement('canvas');
+                    App.State.strokeCvs.width = layer.canvas.width; App.State.strokeCvs.height = layer.canvas.height;
+                    App.State.layerSnapshot = document.createElement('canvas');
+                    App.State.layerSnapshot.width = layer.canvas.width; App.State.layerSnapshot.height = layer.canvas.height;
+                    App.State.layerSnapshot.getContext('2d').drawImage(layer.canvas, 0, 0);
+                    App.State.origSnapshot = document.createElement('canvas');
+                    App.State.origSnapshot.width = layer.originalCanvas.width; App.State.origSnapshot.height = layer.originalCanvas.height;
+                    App.State.origSnapshot.getContext('2d').drawImage(layer.originalCanvas, 0, 0);
+                }
                 if(tool === 'sel-brush') this.paintSelectionBrush(pos, e.altKey);
                 else if(tool === 'smudge') {}
                 else this.paintBrush(pos);
@@ -2524,15 +2580,20 @@ const App = {
             bCtx.fillStyle = gradient;
             bCtx.fillRect(0, 0, size, size);
 
+            // Grab pixels from the CURRENT live layer canvas (which includes previous smudges in this stroke)
+            // Need integer coordinates for predictable sampling
+            const fromX = Math.floor(fromPos.x);
+            const fromY = Math.floor(fromPos.y);
+
             const srcCvs = document.createElement('canvas');
             srcCvs.width = size; srcCvs.height = size;
             const sCtx = srcCvs.getContext('2d');
-            sCtx.drawImage(layer.canvas, fromPos.x - rad, fromPos.y - rad, size, size, 0, 0, size, size);
+            sCtx.drawImage(layer.canvas, fromX - rad, fromY - rad, size, size, 0, 0, size, size);
 
             sCtx.globalCompositeOperation = 'destination-in';
             sCtx.drawImage(brush, 0, 0);
 
-            const opacity = settings.brushOpacity / 100;
+            const opacity = (settings.brushOpacity / 100) * 0.5; // Smudge strength is usually gentler
             const selMask = this.getSelectionMaskForLayer(layer);
 
             const drawTo = (targetCtx) => {
@@ -2549,13 +2610,21 @@ const App = {
 
                      targetCtx.drawImage(maskedSmudge, 0, 0);
                 } else {
-                    targetCtx.drawImage(srcCvs, toPos.x - rad, toPos.y - rad);
+                     targetCtx.drawImage(srcCvs, toPos.x - rad, toPos.y - rad);
                 }
                 targetCtx.restore();
             };
 
             drawTo(ctx);
             drawTo(oCtx);
+
+            // Update layer snapshot so other tools in the same stroke wouldn't revert this (though we only use one tool per stroke)
+            if (App.State.layerSnapshot) {
+                App.State.layerSnapshot.getContext('2d').clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+                App.State.layerSnapshot.getContext('2d').drawImage(layer.canvas, 0, 0);
+                App.State.origSnapshot.getContext('2d').clearRect(0, 0, layer.originalCanvas.width, layer.originalCanvas.height);
+                App.State.origSnapshot.getContext('2d').drawImage(layer.originalCanvas, 0, 0);
+            }
 
             App.Render.update();
         },
@@ -2598,7 +2667,7 @@ const App = {
 
         paintBrush(destPos) {
             const layer = App.Layers.getActive();
-            if(!layer) return;
+            if(!layer || !App.State.strokeCvs) return;
             const ctx = layer.canvas.getContext('2d');
             const oCtx = layer.originalCanvas.getContext('2d');
             const settings = App.State.toolSettings;
@@ -2615,7 +2684,6 @@ const App = {
             const g = parseInt(color.slice(3, 5), 16);
             const b = parseInt(color.slice(5, 7), 16);
             
-            // Ensure inner radius < outer radius to avoid invisible gradient at 100% hardness
             const r0 = Math.min(rad * (settings.brushHardness/100), rad - 0.1);
             const gradient = bCtx.createRadialGradient(rad, rad, r0, rad, rad, rad);
             gradient.addColorStop(0, `rgba(${r},${g},${b},1)`);
@@ -2624,40 +2692,39 @@ const App = {
             bCtx.fillStyle = gradient;
             bCtx.fillRect(0, 0, size, size);
 
-            ctx.save();
-            if(isEraser) ctx.globalCompositeOperation = 'destination-out';
-            ctx.globalAlpha = settings.brushOpacity / 100;
+            const sCtx = App.State.strokeCvs.getContext('2d');
+            sCtx.globalCompositeOperation = 'source-over';
+            sCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
 
             const selMask = this.getSelectionMaskForLayer(layer);
 
+            ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+            ctx.drawImage(App.State.layerSnapshot, 0, 0);
+            oCtx.clearRect(0, 0, layer.originalCanvas.width, layer.originalCanvas.height);
+            oCtx.drawImage(App.State.origSnapshot, 0, 0);
+
+            const finalStrokeCvs = document.createElement('canvas');
+            finalStrokeCvs.width = layer.canvas.width; finalStrokeCvs.height = layer.canvas.height;
+            const fsCtx = finalStrokeCvs.getContext('2d');
+            fsCtx.drawImage(App.State.strokeCvs, 0, 0);
+
             if(selMask) {
-                 // Optimization: reuse a shared temp canvas if possible, but creates are ok for now.
-                 const strokeCvs = document.createElement('canvas');
-                 strokeCvs.width = layer.canvas.width; strokeCvs.height = layer.canvas.height;
-                 const sCtx = strokeCvs.getContext('2d');
-
-                 sCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
-                 sCtx.globalCompositeOperation = 'destination-in';
-                 sCtx.drawImage(selMask, 0, 0);
-
-                 ctx.drawImage(strokeCvs, 0, 0);
-
-                 oCtx.save();
-                 if(isEraser) oCtx.globalCompositeOperation = 'destination-out';
-                 oCtx.globalAlpha = settings.brushOpacity / 100;
-                 oCtx.drawImage(strokeCvs, 0, 0);
-                 oCtx.restore();
-            } else {
-                 ctx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
-
-                 oCtx.save();
-                 if(isEraser) oCtx.globalCompositeOperation = 'destination-out';
-                 oCtx.globalAlpha = settings.brushOpacity / 100;
-                 oCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
-                 oCtx.restore();
+                 fsCtx.globalCompositeOperation = 'destination-in';
+                 fsCtx.drawImage(selMask, 0, 0);
             }
 
+            ctx.save();
+            if(isEraser) ctx.globalCompositeOperation = 'destination-out';
+            ctx.globalAlpha = settings.brushOpacity / 100;
+            ctx.drawImage(finalStrokeCvs, 0, 0);
             ctx.restore();
+
+            oCtx.save();
+            if(isEraser) oCtx.globalCompositeOperation = 'destination-out';
+            oCtx.globalAlpha = settings.brushOpacity / 100;
+            oCtx.drawImage(finalStrokeCvs, 0, 0);
+            oCtx.restore();
+
             App.Render.update();
         },
 
@@ -3048,6 +3115,18 @@ const App = {
                 });
             });
             
+            const topZoom = document.getElementById('top-zoom-slider');
+            if (topZoom) {
+                topZoom.addEventListener('input', e => {
+                    const project = App.getActiveProject();
+                    if(project) {
+                        project.zoom = e.target.value / 100;
+                        document.getElementById('top-zoom-val').innerText = e.target.value + '%';
+                        App.Render.update();
+                    }
+                });
+            }
+
             document.querySelectorAll('input[data-filter]').forEach(input => {
                 input.addEventListener('input', (e) => {
                     const key = e.target.dataset.filter;
