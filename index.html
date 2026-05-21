@@ -662,6 +662,7 @@
                 <option value="image/png">PNG</option>
                 <option value="image/jpeg">JPG (90%)</option>
                 <option value="image/webp">WebP</option>
+                <option value="application/kiep">KIEP Project</option>
                 <option value="application/pdf">PDF</option>
             </select>
             <div class="modal-actions">
@@ -1469,6 +1470,27 @@ const App = {
 
         loadFile(file) {
             App.UI.setBusy(true);
+            if(file.name.toLowerCase().endsWith('.kiep')) {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    try {
+                        const state = JSON.parse(e.target.result);
+                        App.IO.createNewProject(file.name);
+                        // Using setTimeout to let UI update after project creation
+                        setTimeout(() => {
+                            App.History.restore(state);
+                            App.UI.setBusy(false);
+                        }, 50);
+                    } catch(err) {
+                        console.error("Failed to parse KIEP file", err);
+                        alert("Failed to load KIEP project file.");
+                        App.UI.setBusy(false);
+                    }
+                };
+                reader.readAsText(file);
+                return;
+            }
+
             const reader = new FileReader();
             const isTIFF = file.type === 'image/tiff' || file.name.toLowerCase().endsWith('.tif') || file.name.toLowerCase().endsWith('.tiff');
             reader.onload = (e) => {
@@ -1605,7 +1627,15 @@ const App = {
             const canvas = document.getElementById('main-canvas');
             App.Render.update();
             
-            if (format === 'application/pdf') {
+            if (format === 'application/kiep') {
+                App.History.push();
+                const state = project.history[project.historyIndex];
+                const blob = new Blob([JSON.stringify(state)], {type: 'application/json'});
+                const link = document.createElement('a');
+                link.download = name + '.kiep';
+                link.href = URL.createObjectURL(blob);
+                link.click();
+            } else if (format === 'application/pdf') {
                 const { jsPDF } = window.jspdf;
                 const pdf = new jsPDF({ orientation: canvas.width > canvas.height ? 'l' : 'p', unit: 'px', format: [canvas.width, canvas.height] });
                 pdf.addImage(canvas.toDataURL('image/jpeg'), 'JPEG', 0, 0, canvas.width, canvas.height);
@@ -1642,6 +1672,15 @@ const App = {
                     if(e.key === 'c' || e.key === 'C') { e.preventDefault(); this.copySelection(); }
                     if(e.key === 'v' || e.key === 'V') { e.preventDefault(); this.pasteSelection(); }
                     if(e.key === 'a' || e.key === 'A') { e.preventDefault(); this.selectAll(); }
+                    if(e.key === 'z' || e.key === 'Z') {
+                        e.preventDefault();
+                        if (e.shiftKey) App.History.redo();
+                        else App.History.undo();
+                    }
+                    if(e.key === 'y' || e.key === 'Y') {
+                        e.preventDefault();
+                        App.History.redo();
+                    }
                 }
             });
             window.addEventListener('keyup', e => {
@@ -1829,6 +1868,17 @@ const App = {
             if(tool === 'paint' || tool === 'eraser' || tool === 'sel-brush' || tool === 'smudge') {
                 App.State.isDrawing = true;
                 App.State.lastMouse = pos;
+                const layer = App.Layers.getActive();
+                if(layer && (tool === 'paint' || tool === 'eraser' || tool === 'clone' || tool === 'smudge')) {
+                    App.State.strokeCvs = document.createElement('canvas');
+                    App.State.strokeCvs.width = layer.canvas.width; App.State.strokeCvs.height = layer.canvas.height;
+                    App.State.layerSnapshot = document.createElement('canvas');
+                    App.State.layerSnapshot.width = layer.canvas.width; App.State.layerSnapshot.height = layer.canvas.height;
+                    App.State.layerSnapshot.getContext('2d').drawImage(layer.canvas, 0, 0);
+                    App.State.origSnapshot = document.createElement('canvas');
+                    App.State.origSnapshot.width = layer.originalCanvas.width; App.State.origSnapshot.height = layer.originalCanvas.height;
+                    App.State.origSnapshot.getContext('2d').drawImage(layer.originalCanvas, 0, 0);
+                }
                 if(tool === 'sel-brush') this.paintSelectionBrush(pos, e.altKey);
                 else if(tool === 'smudge') {}
                 else this.paintBrush(pos);
@@ -2535,27 +2585,36 @@ const App = {
             const opacity = settings.brushOpacity / 100;
             const selMask = this.getSelectionMaskForLayer(layer);
 
-            const drawTo = (targetCtx) => {
-                targetCtx.save();
-                targetCtx.globalAlpha = opacity;
-                if (selMask) {
-                     const maskedSmudge = document.createElement('canvas');
-                     maskedSmudge.width = layer.canvas.width; maskedSmudge.height = layer.canvas.height;
-                     const mCtx = maskedSmudge.getContext('2d');
+            if (App.State.strokeCvs) {
+                const sCtx = App.State.strokeCvs.getContext('2d');
+                sCtx.globalCompositeOperation = 'source-over';
+                sCtx.drawImage(srcCvs, toPos.x - rad, toPos.y - rad);
 
-                     mCtx.drawImage(srcCvs, toPos.x - rad, toPos.y - rad);
-                     mCtx.globalCompositeOperation = 'destination-in';
-                     mCtx.drawImage(selMask, 0, 0);
+                ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+                ctx.drawImage(App.State.layerSnapshot, 0, 0);
+                oCtx.clearRect(0, 0, layer.originalCanvas.width, layer.originalCanvas.height);
+                oCtx.drawImage(App.State.origSnapshot, 0, 0);
 
-                     targetCtx.drawImage(maskedSmudge, 0, 0);
-                } else {
-                    targetCtx.drawImage(srcCvs, toPos.x - rad, toPos.y - rad);
+                const finalStrokeCvs = document.createElement('canvas');
+                finalStrokeCvs.width = layer.canvas.width; finalStrokeCvs.height = layer.canvas.height;
+                const fsCtx = finalStrokeCvs.getContext('2d');
+                fsCtx.drawImage(App.State.strokeCvs, 0, 0);
+
+                if(selMask) {
+                     fsCtx.globalCompositeOperation = 'destination-in';
+                     fsCtx.drawImage(selMask, 0, 0);
                 }
-                targetCtx.restore();
-            };
 
-            drawTo(ctx);
-            drawTo(oCtx);
+                ctx.save();
+                ctx.globalAlpha = opacity;
+                ctx.drawImage(finalStrokeCvs, 0, 0);
+                ctx.restore();
+
+                oCtx.save();
+                oCtx.globalAlpha = opacity;
+                oCtx.drawImage(finalStrokeCvs, 0, 0);
+                oCtx.restore();
+            }
 
             App.Render.update();
         },
@@ -2598,7 +2657,7 @@ const App = {
 
         paintBrush(destPos) {
             const layer = App.Layers.getActive();
-            if(!layer) return;
+            if(!layer || !App.State.strokeCvs) return;
             const ctx = layer.canvas.getContext('2d');
             const oCtx = layer.originalCanvas.getContext('2d');
             const settings = App.State.toolSettings;
@@ -2615,7 +2674,6 @@ const App = {
             const g = parseInt(color.slice(3, 5), 16);
             const b = parseInt(color.slice(5, 7), 16);
             
-            // Ensure inner radius < outer radius to avoid invisible gradient at 100% hardness
             const r0 = Math.min(rad * (settings.brushHardness/100), rad - 0.1);
             const gradient = bCtx.createRadialGradient(rad, rad, r0, rad, rad, rad);
             gradient.addColorStop(0, `rgba(${r},${g},${b},1)`);
@@ -2624,40 +2682,39 @@ const App = {
             bCtx.fillStyle = gradient;
             bCtx.fillRect(0, 0, size, size);
 
-            ctx.save();
-            if(isEraser) ctx.globalCompositeOperation = 'destination-out';
-            ctx.globalAlpha = settings.brushOpacity / 100;
+            const sCtx = App.State.strokeCvs.getContext('2d');
+            sCtx.globalCompositeOperation = 'source-over';
+            sCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
 
             const selMask = this.getSelectionMaskForLayer(layer);
 
+            ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+            ctx.drawImage(App.State.layerSnapshot, 0, 0);
+            oCtx.clearRect(0, 0, layer.originalCanvas.width, layer.originalCanvas.height);
+            oCtx.drawImage(App.State.origSnapshot, 0, 0);
+
+            const finalStrokeCvs = document.createElement('canvas');
+            finalStrokeCvs.width = layer.canvas.width; finalStrokeCvs.height = layer.canvas.height;
+            const fsCtx = finalStrokeCvs.getContext('2d');
+            fsCtx.drawImage(App.State.strokeCvs, 0, 0);
+
             if(selMask) {
-                 // Optimization: reuse a shared temp canvas if possible, but creates are ok for now.
-                 const strokeCvs = document.createElement('canvas');
-                 strokeCvs.width = layer.canvas.width; strokeCvs.height = layer.canvas.height;
-                 const sCtx = strokeCvs.getContext('2d');
-
-                 sCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
-                 sCtx.globalCompositeOperation = 'destination-in';
-                 sCtx.drawImage(selMask, 0, 0);
-
-                 ctx.drawImage(strokeCvs, 0, 0);
-
-                 oCtx.save();
-                 if(isEraser) oCtx.globalCompositeOperation = 'destination-out';
-                 oCtx.globalAlpha = settings.brushOpacity / 100;
-                 oCtx.drawImage(strokeCvs, 0, 0);
-                 oCtx.restore();
-            } else {
-                 ctx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
-
-                 oCtx.save();
-                 if(isEraser) oCtx.globalCompositeOperation = 'destination-out';
-                 oCtx.globalAlpha = settings.brushOpacity / 100;
-                 oCtx.drawImage(brushCvs, destPos.x - rad, destPos.y - rad);
-                 oCtx.restore();
+                 fsCtx.globalCompositeOperation = 'destination-in';
+                 fsCtx.drawImage(selMask, 0, 0);
             }
 
+            ctx.save();
+            if(isEraser) ctx.globalCompositeOperation = 'destination-out';
+            ctx.globalAlpha = settings.brushOpacity / 100;
+            ctx.drawImage(finalStrokeCvs, 0, 0);
             ctx.restore();
+
+            oCtx.save();
+            if(isEraser) oCtx.globalCompositeOperation = 'destination-out';
+            oCtx.globalAlpha = settings.brushOpacity / 100;
+            oCtx.drawImage(finalStrokeCvs, 0, 0);
+            oCtx.restore();
+
             App.Render.update();
         },
 
