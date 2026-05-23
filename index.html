@@ -586,6 +586,7 @@
                     <button class="btn" data-cmd="grayscale">Grayscale</button>
                     <button class="btn" data-cmd="invert">Invert</button>
                 </div>
+                <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="App.UI.applyFiltersToLayer()">Apply Color Correction</button>
             </div>
         </div>
 
@@ -611,6 +612,7 @@
                     <div class="control-label"><span>Vignette</span> <span id="val-vignette">0%</span></div>
                     <input type="range" data-filter="vignette" min="0" max="100" value="0">
                 </div>
+                <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="App.UI.applyFiltersToLayer()">Apply Effects</button>
             </div>
         </div>
 
@@ -3050,6 +3052,31 @@ const App = {
 
     // --- UI MANIPULATION ---
     UI: {
+        applyFiltersToLayer() {
+            const layer = App.Layers.getActive();
+            if(!layer || layer.type === 'text') return;
+
+            // Bake the filtered canvas back into the originalCanvas
+            const ctx = layer.originalCanvas.getContext('2d');
+            ctx.clearRect(0, 0, layer.width, layer.height);
+            ctx.drawImage(layer.canvas, 0, 0);
+
+            // Reset layer filters
+            layer.filters = {
+                brightness: 100, contrast: 100, saturate: 100,
+                warmth: 0, grayscale: false, invert: false,
+                blur: 0, vignette: 0, sharpen: 0, pixelate: 0,
+                highlights: 0, shadows: 0, blackpoint: 0, whitepoint: 255
+            };
+
+            // Re-render UI and layer list to clear sliders visually
+            App.UI.renderLayerList();
+            App.Filters.renderLayer(layer);
+            App.UI.syncControls();
+            App.Render.update();
+            App.History.push();
+        },
+
         toolDefs: {
             'move': { icon: 'ph-arrows-out', title: 'Move Layer (Hold Space to Pan)' },
             'hand': { icon: 'ph-hand-palm', title: 'Hand Tool (Pan)' },
